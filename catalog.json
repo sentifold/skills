@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "orchestrate",
+      "runtimes": [
+        "codex",
+        "claude"
+      ],
+      "requires": {
+        "codex": [
+          "review-agent",
+          "github-create-pr",
+          "claude"
+        ],
+        "claude": [
+          "review-agent",
+          "github-create-pr",
+          "codex",
+          "claude-stock-code-review"
+        ]
+      },
+      "required_files": [
+        "skills/orchestrate/agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "review-agent",
+      "runtimes": [
+        "codex",
+        "claude"
+      ],
+      "requires": {
+        "codex": [
+          "claude"
+        ],
+        "claude": [
+          "codex"
+        ]
+      },
+      "required_files": [
+        "skills/review-agent/agents/openai.yaml",
+        "skills/review-agent/references/lifecycle.md",
+        "skills/review-agent/references/linter-common.md",
+        "skills/review-agent/references/linter/code-hygiene.md",
+        "skills/review-agent/references/linter/documentation-consistency.md",
+        "skills/review-agent/references/linter/readability.md",
+        "skills/review-agent/references/linter/speculative-complexity-cleanup.md",
+        "skills/review-agent/references/project-contract.md",
+        "skills/review-agent/references/review-common.md",
+        "skills/review-agent/references/review/contracts-standards.md",
+        "skills/review-agent/references/review/correctness-runtime-safety.md",
+        "skills/review-agent/references/review/design-architecture.md",
+        "skills/review-agent/references/review/platform-performance.md",
+        "skills/review-agent/references/review/port-fidelity-followthrough.md",
+        "skills/review-agent/scripts/resolve_scope.py"
+      ]
+    },
+    {
+      "name": "github-create-pr",
+      "runtimes": [
+        "codex",
+        "claude"
+      ],
+      "requires": {},
+      "required_files": [
+        "skills/github-create-pr/agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "claude",
+      "runtimes": [
+        "codex"
+      ],
+      "requires": {},
+      "required_files": [
+        "skills/claude/scripts/claude-ephemeral.sh",
+        "skills/claude/scripts/claude-watch.sh",
+        "lib/provider_runtime.py",
+        "skills/claude/references/runtime.md",
+        "skills/claude/agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "codex",
+      "runtimes": [
+        "claude"
+      ],
+      "requires": {},
+      "required_files": [
+        "skills/codex/scripts/codex-ephemeral.sh",
+        "skills/codex/scripts/codex-watch.sh",
+        "lib/provider_runtime.py",
+        "skills/codex/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "claude-stock-code-review",
+      "runtimes": [
+        "claude"
+      ],
+      "requires": {
+        "claude": [
+          "review-agent"
+        ]
+      },
+      "required_files": [
+        "skills/claude-stock-code-review/agents/openai.yaml"
+      ]
+    }
+  ],
+  "agents": [
+    {
+      "name": "review-orchestrator",
+      "runtime": "codex",
+      "source": "agents/codex/review-orchestrator.toml",
+      "requires": [
+        "review-agent",
+        "claude"
+      ]
+    },
+    {
+      "name": "review-lens",
+      "runtime": "codex",
+      "source": "agents/codex/review-lens.toml",
+      "requires": [
+        "review-agent"
+      ]
+    },
+    {
+      "name": "review-orchestrator",
+      "runtime": "claude",
+      "source": "agents/claude/review-orchestrator.md",
+      "requires": [
+        "review-agent",
+        "codex"
+      ]
+    },
+    {
+      "name": "review-lens",
+      "runtime": "claude",
+      "source": "agents/claude/review-lens.md",
+      "requires": [
+        "review-agent"
+      ]
+    }
+  ]
+}

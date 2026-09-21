@@ -1,0 +1,6 @@
+interface:
+  display_name: "Orchestrate"
+  short_description: "Coordinate engineering work through test and review gates."
+  default_prompt: "Use $orchestrate to carry this engineering task through its applicable gates."
+policy:
+  allow_implicit_invocation: false
