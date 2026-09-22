@@ -252,6 +252,25 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   on it precisely with `wait "$pid"` (or `caffeinate -w "$pid"` on macOS) and read
   `out.txt`, rather than guessing which `codex` process is yours. [Now: the receipt
   also records the supervisor `pid` and the `child_pid`.]
+- **A routed provider hides the built-in `image_gen` tool (verified 2026-09-18,
+  codex-cli 0.154.0).** Where the CLI reaches the model through an account-rotation
+  proxy — a custom `model_providers.<name>` entry whose backend forwards only
+  `/responses`, `/models` and `/alpha/search` — the image tool has nowhere to post:
+  it wants `{backend}/codex/images/generations`. Codex then never offers it and says
+  "built-in image_gen is unavailable in this session" even though `codex features list`
+  reports `image_generation stable true`. This helper cannot fix it, because the
+  provider is the caller's configuration, not the helper's.
+  For an image, run the official CLI binary from inside the npm package
+  (`@openai/codex-<platform>/vendor/<triple>/bin/codex`) against the primary login,
+  bypassing the routing wrapper, with the API-key variables unset so the subscription
+  is used: `env -u OPENAI_API_KEY -u CODEX_API_KEY <binary> exec --ephemeral
+  --skip-git-repo-check --sandbox workspace-write -C <dir> -m <model>
+  -c mcp_servers.node_repl.enabled=false "<prompt>" </dev/null`. That bills the primary
+  account rather than the pool. Ask for the PNG to be copied out of
+  `$CODEX_HOME/generated_images/` into the workspace and its path printed. One image per
+  run, several runs in parallel; a prompt that fails three times with
+  `error sending request for url (.../images/generations)` while its siblings succeed is
+  prompt-specific, so rephrase it rather than retry.
 - **Headless runs cannot use browser MCPs — the helper disables `node_repl` (cua_repl).**
   `codex exec` runs with `approval: never`; the browser MCP asks approval per
   navigation, is refused every time, and the model then reports "web access was
