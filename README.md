@@ -53,8 +53,7 @@ configuration.
 - Ownership receipt: `<home>/.local/share/sentifold-skills-state/receipt.json`,
   keyed by resolved destination path, so a symlinked home or `/var` versus
   `/private/var` spelling is one installation. This directory holds only the
-  installer's own state; the source checkout and the bootstrap cache live
-  elsewhere.
+  installer's own state; the source checkout lives elsewhere.
 - `--runtime codex` or `claude` installs only that runtime's complete set.
 - `--package NAME` (repeatable) installs that package plus everything its
   `requires` closure names for each selected runtime, and the agents whose
