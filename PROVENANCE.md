@@ -1,7 +1,7 @@
 # Source provenance
 
 The initial extraction is from `sentifold/gamejam` commit
-`f4dbd06ec62f86b39138ad86519a6ce6b37a5971` (22 September 2026).
+`f4dbd06ec62f86b39138ad86519a6ce6b37a5971` (21 September 2026).
 
 | Shared content | Original paths |
 | --- | --- |

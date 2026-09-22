@@ -22,7 +22,7 @@ This layer focuses on local, low-ambiguity cleanup and entropy reduction. Prefer
 - Header/include hygiene and compile-time friendliness.
 - Names: vague (`data`, `handle`, `process`), drifted from behavior, too broad or narrow, or inconsistent for the same concept across files. Code is navigated by grep — by humans and agents — so each concept needs one distinctive, searchable name, and dynamically constructed identifiers hide callers from search.
 - Consistent style and structure aligned with project conventions.
-- **Dependency and tool reproducibility**: verify new or changed versions, lockfiles, action references, and images against the project’s pinning policy. A permitted manifest range with a valid lockfile is not automatically a defect.
+- **Unpinned dependency or tool versions**: new or changed dependencies (npm packages, pip packages, GitHub Actions, Docker images, system-installed tools in CI scripts, etc.) should reference an exact version, not a range (`^`, `~`, `>=`) or a floating label (`latest`, `main`, `master`) — unless the project's pinning policy explicitly permits a range backed by a valid lockfile.
 
 Do not use this layer for:
 - subsystem decomposition or module ownership questions

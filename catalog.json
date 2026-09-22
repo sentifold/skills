@@ -91,7 +91,8 @@
         "skills/codex/scripts/codex-ephemeral.sh",
         "skills/codex/scripts/codex-watch.sh",
         "lib/provider_runtime.py",
-        "skills/codex/LICENSE.txt"
+        "skills/codex/LICENSE.txt",
+        "skills/codex/references/runtime-findings.md"
       ]
     },
     {

@@ -22,8 +22,29 @@ Useful profile sections:
   expensive-operation or device requirements, and profiling authorization.
 - Review guidance: project common docs, a mapping from built-in lens names to
   replacement or supplemental paths, and optional measured escape statistics.
-- Provider model/effort choices, when explicitly configured by the team/user.
+- `## Provider policy`: see below.
 - PR template, local publishing helper, and artifact/report expectations.
+
+## Provider policy
+
+The shared review's cross-provider leg needs an explicit model: the provider
+helpers refuse to run without `--model` and read no config-file default, and
+the skill never hardcodes one. A project that wants unattended runs (a chained
+orchestrate Final Review gate, CI-style invocations) is expected to carry a
+`## Provider policy` section naming, per provider leg, the exact model and
+effort, plus an optional CLI selection when the default executable is wrong:
+
+```markdown
+## Provider policy
+
+- Codex leg: model `<exact model id>`, effort `<effort>`.
+- Claude leg: model `<exact model id>`, effort `<effort>`.
+```
+
+The skill reads this section, lets the user's explicit instruction for a run
+override it, and otherwise asks; without the section every chained gate stops
+at that question. Judgment work belongs on strong tiers, so a policy naming a
+fast/cheap tier makes every run it drives report itself as degraded.
 
 Keep evidence separate from policy: a list of required checks is not a test
 receipt. A measured risk weight from one project is not a generic default.

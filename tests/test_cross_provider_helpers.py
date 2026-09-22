@@ -7,6 +7,8 @@ import importlib.util
 import io
 import os
 from pathlib import Path
+import pty
+import shutil
 import signal
 import subprocess
 import sys
@@ -59,6 +61,15 @@ if mode == 'missing':
     if '-p' in args:
         print(json.dumps({'subtype': 'success'}))
     sys.exit(0)
+if mode == 'null-result':
+    print(json.dumps({'subtype': 'success', 'result': None, 'usage': {}}))
+    sys.exit(0)
+if mode.startswith('leftover'):
+    child = subprocess.Popen([sys.executable, '-c',
+        'import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)'])
+    pathlib.Path(os.environ['FAKE_DESCENDANT']).write_text(str(child.pid))
+    if mode == 'leftover-fail':
+        sys.exit(42)
 stdin = sys.stdin.read()
 payload = {'argv': args, 'cwd': os.getcwd(), 'stdin': stdin,
            'key_vars': {k: k in os.environ for k in ('OPENAI_API_KEY', 'CODEX_API_KEY',
@@ -360,11 +371,16 @@ class CrossProviderHelpersTests(unittest.TestCase):
             self.assertTrue(verdict.stdout.startswith('QUIET '), verdict.stdout)
 
     def lifecycle_fixture(self):
-        root = self.root / 'lifecycle'
+        args = RUNTIME.parser('codex').parse_args(['--model', 'fixture-model', '--', 'fixture prompt'])
+        return RUNTIME.Run('codex', args)
+
+    def run_quietly(self, run):
+        root = self.root / f'lifecycle-{run.run_id}'
         root.mkdir()
-        args = RUNTIME.parser('codex').parse_args(['--model', 'fixture-model'])
-        with mock.patch.object(RUNTIME.tempfile, 'mkdtemp', return_value=str(root)):
-            return RUNTIME.Run('codex', args)
+        with mock.patch.object(RUNTIME.tempfile, 'mkdtemp', return_value=str(root)), \
+             contextlib.redirect_stdout(io.StringIO()) as stdout, contextlib.redirect_stderr(io.StringIO()):
+            code = run.run()
+        return code, stdout.getvalue()
 
     def test_leader_exit_is_detected_without_waitid_and_leaves_it_unreaped(self):
         # macOS interpreters before 3.13 have no os.waitid; the ps path must agree.
@@ -407,9 +423,8 @@ class CrossProviderHelpersTests(unittest.TestCase):
         run.child = child
         try:
             with mock.patch.object(run, 'perform', return_value=None), \
-                 mock.patch.object(RUNTIME.os, 'killpg', side_effect=PermissionError(1, 'Operation not permitted')), \
-                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                code = run.run()
+                 mock.patch.object(RUNTIME.os, 'killpg', side_effect=PermissionError(1, 'Operation not permitted')):
+                code, _ = self.run_quietly(run)
             self.assertEqual(code, 125)
             receipt = json.loads(run.receipt.read_text())
             self.assertEqual(receipt['status'], 'CLEANUP_FAILED')
@@ -418,6 +433,148 @@ class CrossProviderHelpersTests(unittest.TestCase):
         finally:
             os.killpg(child.pid, signal.SIGKILL)
             child.wait(timeout=3)
+
+    def test_null_claude_result_is_missing_not_a_crash(self):
+        result = self.run_helper('claude', mode='null-result')
+        self.assertEqual(result.returncode, 4, result.stderr)
+        receipt = self.receipt(result)
+        self.assertEqual(receipt['status'], 'MISSING')
+        self.assertNotIn('AttributeError', receipt['diagnostic'])
+        self.assertNotIn('Traceback', result.stderr)
+
+    def test_leftover_descendant_after_leader_exit_keeps_child_rc(self):
+        descendant = Path(self.env['FAKE_DESCENDANT'])
+        for provider in ('codex', 'claude'):
+            for mode, code in (('leftover', 0), ('leftover-fail', 42)):
+                with self.subTest(provider=provider, mode=mode):
+                    descendant.unlink(missing_ok=True)
+                    result = self.run_helper(provider, mode=mode)
+                    self.assertEqual(result.returncode, code, result.stderr)
+                    receipt = self.receipt(result)
+                    self.assertEqual(receipt['status'], 'DONE' if code == 0 else 'FAILED')
+                    self.assertNotIn('cleanup_warning', receipt)
+                    self.assert_stopped(self.wait_path(descendant))
+
+    def test_unverifiable_cleanup_after_successful_exit_is_a_warning(self):
+        real_ps = shutil.which('ps', path=os.defpath)
+        fake_ps = self.bin / 'ps'
+        # Group listing fails as if procps were missing; the leader-state probe still works.
+        fake_ps.write_text('#!/bin/sh\ncase "$*" in *-axo*) exit 1;; esac\nexec ' + real_ps + ' "$@"\n')
+        fake_ps.chmod(0o755)
+        self.addCleanup(fake_ps.unlink)
+        descendant = Path(self.env['FAKE_DESCENDANT'])
+        descendant.unlink(missing_ok=True)
+        result = self.run_helper('codex', mode='leftover')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = self.receipt(result)
+        self.assertEqual(receipt['status'], 'DONE')
+        self.assertIn('Cannot verify cleanup', receipt['cleanup_warning'])
+        self.assert_stopped(self.wait_path(descendant))
+        self.assertEqual(self.watch('codex', receipt['receipt']).returncode, 0)
+
+    def stale_run_dir(self, provider, status, age_days, **fields):
+        run_id = os.urandom(8).hex()
+        root = self.root / f'{provider}-{run_id}-stale'
+        root.mkdir()
+        finished = time.time() - age_days * 86400
+        receipt = dict(schema=1, provider=provider, run_id=run_id, status=status,
+                       finished_at=finished, **fields)
+        (root / 'receipt.json').write_text(json.dumps(receipt))
+        (root / 'provider.stdout').write_text('transcript')
+        return root
+
+    def test_finished_run_dirs_older_than_retention_are_collected(self):
+        old_done = self.stale_run_dir('codex', 'DONE', 8)
+        old_failed = self.stale_run_dir('codex', 'FAILED', 8)
+        recent_done = self.stale_run_dir('codex', 'DONE', 6)
+        old_running = self.stale_run_dir('codex', 'RUNNING', 8)
+        old_kept = self.stale_run_dir('codex', 'DONE', 8, keep=True)
+        other_provider = self.stale_run_dir('claude', 'DONE', 8)
+        foreign = self.root / 'codex-not-a-run'
+        foreign.mkdir()
+        (foreign / 'receipt.json').write_text(json.dumps(dict(schema=1, provider='codex', run_id='x',
+                                                              status='DONE', finished_at=0)))
+        result = self.run_helper('codex', '--keep')
+        receipt = self.receipt(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(receipt['collected_run_dirs'], 2)
+        self.assertTrue(receipt['keep'])
+        for path in (old_done, old_failed):
+            self.assertFalse(path.exists(), path)
+        for path in (recent_done, old_running, old_kept, other_provider, foreign, Path(receipt['receipt']).parent):
+            self.assertTrue(path.exists(), path)
+
+    def test_empty_prompt_argument_falls_back_to_stdin_unless_stdin_is_a_terminal(self):
+        for provider in ('codex', 'claude'):
+            with self.subTest(provider=provider):
+                command = self.command(provider, prompt=False) + ['--', '']
+                piped = subprocess.run(command, input='piped prompt\n', cwd=self.caller,
+                                       env={**self.env, 'FAKE_MODE': 'success'},
+                                       capture_output=True, text=True, timeout=12)
+                self.assertEqual(piped.returncode, 0, piped.stderr)
+                self.assertEqual(json.loads(Path(self.receipt(piped)['output']).read_text())['stdin'],
+                                 'piped prompt\n')
+                leader, follower = pty.openpty()
+                try:
+                    terminal = subprocess.run(command, stdin=follower, cwd=self.caller,
+                                              env={**self.env, 'FAKE_MODE': 'success'},
+                                              capture_output=True, text=True, timeout=12)
+                finally:
+                    os.close(leader)
+                    os.close(follower)
+                self.assertEqual(terminal.returncode, 2)
+                self.assertIn('Provide a prompt', terminal.stderr)
+                self.assertNotIn('_RUN_START', terminal.stdout)
+
+    def test_usage_failures_create_no_run_directory(self):
+        before = set(self.root.iterdir())
+        taken = self.root / 'taken.md'
+        taken.write_text('taken')
+        for provider in ('codex', 'claude'):
+            self.assertEqual(self.run_helper(provider, '--out', str(taken)).returncode, 2)
+        self.assertEqual(self.run_helper('claude', '--output-schema', str(self.root / 'absent.json')).returncode, 2)
+        self.assertEqual(set(self.root.iterdir()), before | {taken})
+        self.assertEqual(taken.read_text(), 'taken')
+
+    def test_exit_marker_is_printed_when_the_receipt_cannot_be_saved(self):
+        run = self.lifecycle_fixture()
+        def vanish():
+            shutil.rmtree(run.root)
+        with mock.patch.object(run, 'perform', side_effect=vanish):
+            code, stdout = self.run_quietly(run)
+        self.assertEqual(code, 2)
+        lines = stdout.splitlines()
+        self.assertTrue(lines[0].startswith('CODEX_RUN_START '), stdout)
+        exit_line = json.loads(lines[-1].split(' ', 1)[1])
+        self.assertTrue(lines[-1].startswith('CODEX_RUN_EXIT '), stdout)
+        self.assertEqual(exit_line['rc'], 2)
+        self.assertEqual(exit_line['receipt_error'], 'FileNotFoundError')
+
+    def test_signal_during_timeout_cleanup_keeps_the_timeout_cause(self):
+        for key in ('FAKE_STARTED', 'FAKE_DESCENDANT'):
+            Path(self.env[key]).unlink(missing_ok=True)
+        process = subprocess.Popen(self.command('codex', '--timeout', '1.5'), cwd=self.caller,
+                                   env={**self.env, 'FAKE_MODE': 'orphan'},
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                   start_new_session=True)
+        try:
+            self.wait_path(Path(self.env['FAKE_DESCENDANT']))
+            start = json.loads(process.stdout.readline().split(' ', 1)[1])
+            deadline = json.loads(Path(start['receipt']).read_text())['deadline_at']
+            # The descendant ignores TERM, so the timeout cleanup spends a full grace
+            # second before KILL; a TERM inside that window must be deferred.
+            time.sleep(max(0, deadline + .4 - time.time()))
+            process.send_signal(signal.SIGTERM)
+            stdout, stderr = process.communicate(timeout=6)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+        self.assertEqual(process.returncode, 124, stderr)
+        receipt = json.loads(Path(start['receipt']).read_text())
+        self.assertEqual(receipt['status'], 'TIMEOUT')
+        self.assertEqual(receipt['deferred_signals'], [int(signal.SIGTERM)])
+        self.assertTrue(stdout.strip().startswith('CODEX_RUN_EXIT '), stdout)
 
 
 if __name__ == '__main__':

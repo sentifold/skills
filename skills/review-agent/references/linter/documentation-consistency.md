@@ -4,7 +4,7 @@ Read [shared linter guidance](../linter-common.md) first — the shared linter m
 
 This layer checks for direct, mechanical drift between changed code and durable documentation/comments. Prefer findings that can be tied to specific touched behavior, config, CLI flags, persistence paths, or troubleshooting steps.
 
-**Stance**: stale instructions and examples mislead users and future maintainers. Read the target project’s actual documentation map and verify its changed claims. Verify claims against the code, not against plausibility.
+**Stance**: stale agent-facing docs are worse than no docs — CLAUDE.md, AGENTS files, and the project's `docs/` are context that every future agent loads and trusts, so drift steers every future change wrong. Read the target project’s actual documentation map and verify its changed claims against the code, not against plausibility.
 
 **Investigation** — do this before forming any finding:
 

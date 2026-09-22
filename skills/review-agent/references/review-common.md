@@ -7,7 +7,7 @@ Every review layer doc references this file. Read it in full before applying any
 Understand first, then judge. Surface-level review finds surface-level issues; your value comes from understanding the system deeply enough to see what the diff *means*, not just what it says.
 
 1. **Build a system model.** Look at the requested change scope, then read beyond the diff — the full files it touches, their callers, the modules they depend on (use the target project’s architecture map when provided). Work until you can answer: what is this subsystem responsible for, how does it connect to the rest of the system, and what is this change actually trying to accomplish?
-2. **Evaluate the fit.** The diff is your entry point, not your boundary — treat it as a probe into the system. When a diff adds guards, special cases, or workarounds, the real finding is usually the structural gap it compensates for. You may identify pre-existing structure when the diff exposes its concrete consequence; label existing debt separately from newly introduced regressions.
+2. **Evaluate the fit.** The diff is your entry point, not your boundary — treat it as a probe into the system. When a diff adds guards, special cases, or workarounds, the real finding is usually the structural gap it compensates for. You have an explicit mandate to indict pre-existing structure when the diff is a symptom of it; label existing debt separately from newly introduced regressions.
 3. **Apply your layer lens.** Follow the investigation method in the layer instructions. Gather evidence with tools — read code, grep for patterns, trace flows. Form findings only from what you verified, never from what the diff merely suggests.
 4. **Report** using the output format below.
 
@@ -50,7 +50,7 @@ Incrementally generated code degrades architecture in recognizable ways. When yo
 - Edge cases that cannot occur given the actual inputs.
 - Config values or thresholds that are tuned empirically.
 - Anything already addressed elsewhere in the same diff — read the full diff before reporting.
-- Duplicate reports of issues already demonstrated by an applicable deterministic check. Record that failure once; do not assume an unavailable or unrun CI check passed.
+- Issues a compiler, linter, or typechecker would catch — suppressed when the run's deterministic check step ran for this snapshot (its failures are recorded once as findings); report them only when that check was unavailable or not run. Never assume an unrun check passed.
 - Compatibility demands unsupported by the target project’s actual contract (see Guiding Principles).
 
 ## Output Format

@@ -39,17 +39,37 @@ python3 install.py apply --runtime both
 python3 install.py doctor --runtime both
 ```
 
-The installer prints source/destination paths and writes only the selected
-packages, agent files and its ownership receipt. It does not change model,
-authentication, MCP, approval, network or nesting configuration.
+The installer prints every planned change as `link -> target`, with
+`(was -> <previous target>)` for a symlink it adopts, retargets or removes, and
+writes only the selected packages, agent files and its ownership receipt. It
+does not change model, authentication, MCP, approval, network or nesting
+configuration.
 
-- Codex skills: `~/.agents/skills/`; agents: `$CODEX_HOME/agents/`
+- Codex skills: `<home>/.agents/skills/` (`--home`, default `$HOME`;
+  `CODEX_HOME` does not move it); agents: `$CODEX_HOME/agents/`
   (default `~/.codex/agents/`).
 - Claude skills and agents: `$CLAUDE_CONFIG_DIR/skills/` and `agents/`
   (default `~/.claude/`).
+- Ownership receipt: `<home>/.local/share/sentifold-skills-state/receipt.json`,
+  keyed by resolved destination path, so a symlinked home or `/var` versus
+  `/private/var` spelling is one installation. This directory holds only the
+  installer's own state; the source checkout and the bootstrap cache live
+  elsewhere.
 - `--runtime codex` or `claude` installs only that runtime's complete set.
+- `--package NAME` (repeatable) installs that package plus everything its
+  `requires` closure names for each selected runtime, and the agents whose
+  requirements are then met; the selection is the desired state, so a package
+  left out of a later `apply` is removed. Default: every catalog package.
 - `--home`, `--codex-home`, `--claude-config-dir` support explicit roots and
   isolated test installations; see `python3 install.py --help`.
+
+`apply` takes `install.lock` in the state directory and writes a journal of the
+planned changes there before touching any destination. If the process is killed
+mid-way, the next `plan` reads that journal, owns again every change it finds
+written (including adopted links and their recorded original targets), reports
+any destination that changed since, and `apply` or `uninstall` completes the
+recovery and clears the lock. A journal whose process is still running is never
+taken over.
 
 Skills are symlinks; agent definitions are rendered real files pointing at the
 same checkout. Keep that checkout. Do not edit an installed release while an
@@ -63,7 +83,15 @@ Run `plan` before `apply`. Unowned folders/files and modified managed files are
 conflicts, not overwrite targets. Move or reconcile those files yourself. For an
 existing symlink whose ownership you deliberately transfer, repeat
 `--adopt NAME` for that package on `plan` and `apply`. Original targets are saved
-for uninstall, including legacy duplicates in `~/.codex/skills`.
+for uninstall, including legacy duplicates in `~/.codex/skills`. A directory
+there is reported as a legacy duplicate to move aside; the installer never
+removes ordinary files or directories.
+
+If another link manager later retargets an owned symlink or recreates a removed
+legacy link, `plan` names the entry and the fix: restore it, delete the
+recreated legacy link, or pass `--adopt NAME` again to take it over with the new
+target recorded. `uninstall` proceeds when the disk already holds an entry's
+restore target.
 
 If dotfiles or another sync tool owns a package, remove **that package only**
 from its link plan before adoption. In the earlier Sentifold dotfiles setup,
@@ -90,6 +118,13 @@ local checks and review overlays. [Sleash example](examples/sleash.project-workf
 shows a `main`/`make check` consumer. Gamejam retains native/browser/iOS testing,
 profiling consent, platform policy and measured review priorities in its profile.
 
+**Connect a project:** copy [templates/project-workflow.md](templates/project-workflow.md)
+to the project's `.agents/project-workflow.md`, fill every placeholder from
+that checkout's own instructions, and follow the numbered procedure in
+[docs/onboarding.md](docs/onboarding.md#подключение-проекта-connect-a-project)
+(install, profile, Codex `agents.max_depth = 2`, smoke run, optional pin file,
+update/rollback).
+
 Nested agents and resume tools vary by client. The parent records scope, child
 IDs, deadlines and completed evidence. If nesting or SendMessage is unavailable,
 it coordinates sibling agents and collects results itself; incomplete coverage
@@ -101,12 +136,15 @@ before use. CLI paths may be selected explicitly; no automatic switch to an app
 binary or another model bypasses a user's wrapper. Logs contain version/run IDs,
 not credentials. `doctor` checks installation and CLI versions; it does not prove
 a model can run or that a user's inherited configuration isolates network/auth.
+For Codex it reads `config.toml` and warns only when `features.multi_agent` or
+`agents.max_depth` (2 for the review topology) is missing or too low.
 
 ## Update, rollback and uninstall
 
 Run tests in a new checkout, then run its installer with the same home/runtime
 roots. Owned links and rendered agents switch together. To roll back, run the
-previous checkout's `install.py apply` with those same arguments. Keep both
+previous checkout's `install.py apply` with those same arguments (a bootstrap
+cache keeps it at `~/.cache/sentifold-skills/<old-rev>/install.py`). Keep both
 checkouts until the new release has passed the project's smoke task. For a pinned
 consumer, update its lock through a reviewed PR and use its bootstrap command.
 
@@ -129,8 +167,9 @@ python3 -m unittest discover -s tests -v
 ```
 
 Tests use temporary homes/repos and fake CLIs; they neither publish PRs nor call
-models. CI runs them on macOS and Linux with Python 3.11. Keep behavior tests for
-installer conflicts and provider exit/cancel/result handling when changing them.
+models. CI runs them on macOS and Linux with Python 3.11, 3.12 and 3.14. Keep
+behavior tests for installer conflicts, crash recovery and provider
+exit/cancel/result handling when changing them.
 Use independent task fixtures for workflow changes, then pilot the supported
 clients before rolling the version out to the team.
 

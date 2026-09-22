@@ -22,7 +22,7 @@ This guidance and the layer docs encode judgment frozen in time. These heuristic
 - Edge cases that cannot occur given the actual inputs.
 - Config values or thresholds that are tuned empirically.
 - Anything already addressed elsewhere in the same diff — read the full diff before reporting.
-- Duplicate reports of issues already demonstrated by an applicable deterministic check; never assume an unrun check passed.
+- Issues a compiler, linter, or typechecker would catch — suppressed when the run's deterministic check step ran for this snapshot (its failures are recorded once); report them only when that check was unavailable or not run. Never assume an unrun check passed.
 - Compatibility demands unsupported by the target project’s stated contract; do not suppress required migrations.
 
 **"No issues found" is a valid and expected output.** Do not invent cleanup to have something to report.

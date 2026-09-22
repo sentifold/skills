@@ -15,9 +15,33 @@ class ScopeError(Exception):
     """The requested scope cannot be established without guessing."""
 
 
+PINNED_CONFIG = (
+    "core.fsmonitor=false",
+    "diff.noprefix=false",
+    "diff.mnemonicPrefix=false",
+    "diff.srcPrefix=a/",
+    "diff.dstPrefix=b/",
+    "diff.suppressBlankEmpty=false",
+)
+
+# The digest must not depend on the user's diff.* preferences.
+PINNED_DIFF_OPTIONS = (
+    "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--no-renames", "-U3",
+    "--diff-algorithm=myers", "--inter-hunk-context=0", "--no-relative",
+    "--submodule=short", "--indent-heuristic", "-O" + os.devnull,
+)
+
+IN_PROGRESS_OPERATIONS = (
+    ("MERGE_HEAD", "merge"), ("CHERRY_PICK_HEAD", "cherry-pick"), ("REVERT_HEAD", "revert"),
+    ("REBASE_HEAD", "rebase"), ("rebase-merge", "rebase"), ("rebase-apply", "rebase or am"),
+    ("BISECT_LOG", "bisect"),
+)
+
+
 def git(repo, *args, optional=False):
+    config = [item for key in PINNED_CONFIG for item in ("-c", key)]
     result = subprocess.run(
-        ["git", "--no-optional-locks", "-c", "core.fsmonitor=false", *args], cwd=repo,
+        ["git", "--no-optional-locks", *config, *args], cwd=repo,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
     )
     if result.returncode:
@@ -39,14 +63,14 @@ def paths(data):
 
 
 def changed_paths(repo, *revisions, cached=False):
-    args = ["diff", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--name-only", "-z"]
+    args = ["diff", *PINNED_DIFF_OPTIONS, "--name-only", "-z"]
     if cached:
         args.append("--cached")
     return paths(git(repo, *args, *revisions, "--"))
 
 
 def diff(repo, *revisions, cached=False):
-    args = ["diff", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--binary", "--full-index"]
+    args = ["diff", *PINNED_DIFF_OPTIONS, "--binary", "--full-index"]
     if cached:
         args.append("--cached")
     return git(repo, *args, *revisions, "--")
@@ -74,10 +98,40 @@ def untracked_digest(repo, name):
     return kind, digest.hexdigest()
 
 
+def refuse_in_progress_operation(root):
+    for name, operation in IN_PROGRESS_OPERATIONS:
+        marker = git(root, "rev-parse", "--git-path", name).decode().strip()
+        if (root / marker).exists():
+            raise ScopeError(f"A {operation} is in progress ({name} exists); finish or abort it before resolving a review scope")
+    if git(root, "ls-files", "--unmerged", "-z").strip(b"\0"):
+        raise ScopeError("The index has unmerged entries; resolve the conflicts before resolving a review scope")
+
+
+def local_branch(root, name):
+    if not name or name.startswith("-"):
+        return None
+    if git(root, "rev-parse", "--verify", "--quiet", "--end-of-options", "refs/heads/" + name, optional=True) is None:
+        return None
+    return name
+
+
+def upstream_ref(root, branch, remote):
+    upstream = git(root, "rev-parse", "--symbolic-full-name", "--end-of-options", branch + "@{upstream}", optional=True)
+    if upstream and upstream.strip().startswith(b"refs/remotes/"):
+        return upstream.decode().strip()
+    candidate = f"refs/remotes/{remote}/{branch}"
+    if git(root, "rev-parse", "--verify", "--quiet", "--end-of-options", candidate, optional=True) is not None:
+        return candidate
+    return None
+
+
 def resolve(repo, base=None, head="HEAD", mode="branch", include_worktree=False,
             exact_base=False, remote="origin"):
     repo = Path(repo).resolve()
     root = Path(os.fsdecode(git(repo, "rev-parse", "--show-toplevel").rstrip(b"\n")))
+    if not remote or remote.startswith("-"):
+        raise ScopeError("Invalid remote name")
+    refuse_in_progress_operation(root)
     head_id = commit(root, head)
     current_head = commit(root, "HEAD")
     include_dirty = mode == "uncommitted" or include_worktree
@@ -88,27 +142,49 @@ def resolve(repo, base=None, head="HEAD", mode="branch", include_worktree=False,
     if exact_base and not base:
         raise ScopeError("--exact-base requires an explicit --base")
 
+    warnings = []
     base_source = "explicit"
     if mode == "uncommitted":
         base = "HEAD"
         base_source = "uncommitted"
     elif base is None:
-        branch = git(root, "symbolic-ref", "--quiet", "--short", "HEAD", optional=True)
+        if head == "HEAD":
+            symbolic = git(root, "symbolic-ref", "--quiet", "--short", "HEAD", optional=True)
+            branch = symbolic.decode().strip() if symbolic else None
+        else:
+            branch = local_branch(root, head)
         configured = None
         if branch:
-            configured = git(root, "config", "--get", "branch." + branch.decode().strip() + ".gh-merge-base", optional=True)
+            configured = git(root, "config", "--get", "branch." + branch + ".gh-merge-base", optional=True)
         if configured and configured.strip():
             base = configured.decode().strip()
             base_source = "branch.gh-merge-base"
         else:
-            if not remote or remote.startswith("-"):
-                raise ScopeError("Invalid remote name")
             default = git(root, "symbolic-ref", "--quiet", f"refs/remotes/{remote}/HEAD", optional=True)
             if not default:
-                raise ScopeError("No explicit base, branch gh-merge-base, or remote HEAD; specify --base")
+                raise ScopeError(
+                    f"No explicit base, branch gh-merge-base, or remote HEAD for '{remote}'; specify --base, "
+                    f"or record the remote's default branch with `git remote set-head {remote} -a` "
+                    "(that command contacts the remote; run it only within an authorized workflow)")
             base = default.decode().strip()
             base_source = "remote HEAD (local ref; not fetched)"
-    base_tip = commit(root, base)
+
+    base_upstream = None
+    base_local_tip = None
+    if not exact_base and mode != "uncommitted" and local_branch(root, base):
+        base_upstream = upstream_ref(root, base, remote)
+        if base_upstream:
+            base_local_tip = commit(root, base)
+            base_tip = commit(root, base_upstream)
+            behind = git(root, "rev-list", "--count", f"{base_local_tip}..{base_tip}").decode().strip()
+            if behind != "0":
+                warnings.append(
+                    f"local branch '{base}' is behind {base_upstream} by {behind} commit(s); "
+                    "the remote-tracking ref was used as the base (local refs; nothing fetched)")
+        else:
+            base_tip = commit(root, base)
+    else:
+        base_tip = commit(root, base)
     if exact_base or mode == "uncommitted":
         base_id = base_tip
     else:
@@ -150,10 +226,12 @@ def resolve(repo, base=None, head="HEAD", mode="branch", include_worktree=False,
     return {
         "repository_root": str(root), "mode": mode,
         "base_ref": base, "base_source": base_source,
+        "base_upstream": base_upstream, "base_local_tip": base_local_tip,
         "base_tip": base_tip, "base_commit": base_id, "head_commit": head_id,
         "includes_worktree": include_dirty, "changed_paths": sorted(included_paths),
         "excluded_dirty_paths": [] if include_dirty else dirty_paths,
         "untracked_files": untracked_files, "snapshot_sha256": digest.hexdigest(),
+        "warnings": warnings,
         "snapshot_note": "Fingerprint, not a frozen checkout; stop concurrent writes and recheck after review.",
     }
 

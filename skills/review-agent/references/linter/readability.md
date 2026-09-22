@@ -11,7 +11,7 @@ This layer judges what the changed code is like to understand. The other layers 
 1. **Cold read**: take each changed file top to bottom as a newcomer — no diff context, no commit message. Narrate your understanding as you go: "this module is responsible for X… this function takes Y and produces Z… now it's doing — wait, why is it doing that?"
 2. **Log every stumble**, honestly: you had to re-read a block; you had to leave the file (or chase a header) to understand it; you held too many facts in working memory to follow one function; a name promised one thing and the code did another; you reached the bottom unsure what the file is *for*. Each stumble is a candidate finding — locate what caused it.
 3. **Check the narrative structure**: does the file read top-down, from intent to detail — public surface and high-level orchestration first, supporting detail below? Does each function stay at one level of abstraction, or does it mix high-level steps with low-level fiddling so the reader keeps changing altitude?
-4. **The one-sentence test**: explain each changed file and significant function in one sentence. If that requires unrelated responsibilities, investigate whether the unit needs a clearer boundary. A conjunction alone is not evidence of a defect.
+4. **The one-sentence test**: explain each changed file and significant function in one sentence. If the sentence needs an "and", the unit tells two stories. If you can't form the sentence, it has no story.
 
 **What to probe**:
 

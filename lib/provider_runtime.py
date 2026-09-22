@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Bounded POSIX lifecycle for the portable Codex and Claude shell helpers.
 
-Derived from Theta Games' cross-provider helpers (gamejam f4dbd06ec).
+Copyright (c) 2026 Theta Games. Derived from gamejam f4dbd06ec.
+Internal use only; see LICENSE.txt at the repository root.
 Provider configuration/authentication is inherited; this is not a security sandbox.
 """
 from __future__ import annotations
@@ -18,6 +19,10 @@ import sys
 import tempfile
 import time
 import uuid
+
+
+TERMINAL_STATUSES = frozenset(("DONE", "FAILED", "MISSING", "TIMEOUT", "CANCELLED", "CLEANUP_FAILED"))
+RUN_DIR_RETENTION_SECONDS = 7 * 86400
 
 
 class RunError(Exception):
@@ -47,6 +52,7 @@ def parser(provider):
     p.add_argument("--out", help="unused destination; existing files are rejected")
     p.add_argument("--timeout", type=positive, default=1800)
     p.add_argument("--preflight-timeout", type=positive, default=10)
+    p.add_argument("--keep", action="store_true", help="exempt this run directory from the retention sweep")
     p.add_argument("--no-watchdog", action="store_true", help="compatibility no-op; no watchdog is spawned")
     p.add_argument("--search", dest="search", action="store_true", default=True)
     p.add_argument("--no-search", dest="search", action="store_false")
@@ -104,20 +110,44 @@ def leader_state(pid):
     return snapshot.stdout.strip()[:1]
 
 
+def collect_finished_run_dirs(provider, own_root):
+    removed = 0
+    now = time.time()
+    for entry in Path(tempfile.gettempdir()).glob(f"{provider}-*"):
+        receipt = entry / "receipt.json"
+        try:
+            if entry == own_root or not entry.is_dir() or not receipt.is_file():
+                continue
+            data = json.loads(receipt.read_text(encoding="utf-8"))
+            owned = (data.get("schema") == 1 and data.get("provider") == provider
+                     and entry.name.startswith(f"{provider}-{data.get('run_id')}-"))
+            if not owned or data.get("keep") or data.get("status") not in TERMINAL_STATUSES:
+                continue
+            finished = data.get("finished_at") or receipt.stat().st_mtime
+            if now - float(finished) < RUN_DIR_RETENTION_SECONDS:
+                continue
+            shutil.rmtree(entry)
+            removed += 1
+        except (OSError, ValueError, TypeError):
+            continue
+    return removed
+
+
 class Run:
     def __init__(self, provider, args):
         self.provider, self.args = provider, args
         self.run_id = uuid.uuid4().hex
-        self.root = Path(tempfile.mkdtemp(prefix=f"{provider}-{self.run_id}-")).resolve()
-        self.receipt = self.root / "receipt.json"
-        self.result = self.root / "result.txt"
+        self.root = self.receipt = self.result = None
         self.child = None
         self.deadline = time.monotonic() + args.timeout
         self.export = Path(args.out).absolute() if args.out else None
         self.reservation = None
+        self.schema = None
+        self.prompt_text = None
+        self.shield = False
         self.data = dict(schema=1, provider=provider, run_id=self.run_id, pid=os.getpid(),
                          status="STARTING", started_at=time.time(), deadline_at=time.time() + args.timeout,
-                         result=str(self.result), receipt=str(self.receipt))
+                         keep=bool(args.keep))
         self.env = os.environ.copy()
         keys = ("OPENAI_API_KEY", "CODEX_API_KEY") if provider == "codex" else (
             "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
@@ -129,12 +159,19 @@ class Run:
 
     def save(self, **fields):
         self.data.update(fields)
+        self.data["deadline_remaining"] = round(max(0.0, self.deadline - time.monotonic()), 3)
         atomic_json(self.receipt, self.data)
 
     def marker(self, kind, **fields):
         # Only this supervisor writes lifecycle stdout. Provider text stays in files.
         print(f"{self.provider.upper()}_RUN_{kind} " + json.dumps(
             dict(run_id=self.run_id, **fields), separators=(",", ":")), flush=True)
+
+    def on_signal(self, signum, _frame):
+        if self.shield:
+            self.data.setdefault("deferred_signals", []).append(signum)
+            return
+        raise Cancelled(signum)
 
     @staticmethod
     def child_exited(process):
@@ -172,10 +209,7 @@ class Run:
                                125, "CLEANUP_FAILED") from exc
             return False
 
-    def cleanup(self):
-        if self.child is None:
-            return
-        process = self.child
+    def stop_group(self, process):
         # A new session owns this group, including normal descendants even if the
         # leader has exited. Never terminate by executable name or caller's group.
         group_exists = self.signal_group(process.pid, signal.SIGTERM)
@@ -201,6 +235,28 @@ class Run:
             process.wait(timeout=2)
         except subprocess.TimeoutExpired as exc:
             raise RunError(f"Owned child {process.pid} did not stop after KILL", 125, "CLEANUP_FAILED") from exc
+
+    def cleanup(self, strict=True):
+        if self.child is None:
+            return
+        process = self.child
+        self.shield = True
+        try:
+            self.stop_group(process)
+        except RunError as exc:
+            if strict:
+                raise
+            self.data["cleanup_warning"] = str(exc)
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+        finally:
+            self.shield = False
         self.child = None
 
     def execute(self, argv, label, *, stdin=None, cwd=None, limit=None):
@@ -232,8 +288,14 @@ class Run:
                         raise RunError(f"{label} exceeded its deadline; inspect {err}", 124, "TIMEOUT")
                     time.sleep(interval)
                     interval = min(interval * 1.5, EXIT_POLL_LIMIT)
-            finally:
+            except BaseException:
+                # The first cause stays; signals during cleanup are only recorded.
                 self.cleanup()
+                raise
+            self.cleanup(strict=False)
+            deferred = self.data.get("deferred_signals")
+            if deferred:
+                raise Cancelled(deferred[0])
         return process.returncode, out, err
 
     def probe(self, cli, flags, label):
@@ -325,8 +387,8 @@ class Run:
             argv += ["--effort", a.effort]
         if a.agent:
             argv += ["--agent", a.agent]
-        if a.output_schema:
-            argv += ["--json-schema", json.dumps(json.loads(Path(a.output_schema).read_text()))]
+        if self.schema is not None:
+            argv += ["--json-schema", json.dumps(self.schema)]
         return argv, a.cd
 
     def claude_result(self, stdout):
@@ -346,7 +408,7 @@ class Run:
             "input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")})
         payload = envelope.get("structured_output") if self.args.output_schema else envelope.get("result")
         if payload is None and self.args.output_schema:
-            raw = envelope.get("result", "").strip()
+            raw = (envelope.get("result") or "").strip()
             if raw.startswith("```") and raw.endswith("```"):
                 raw = "\n".join(raw.splitlines()[1:-1])
             try:
@@ -358,7 +420,28 @@ class Run:
         rendered = payload if isinstance(payload, str) else json.dumps(payload, indent=2, sort_keys=True)
         self.result.write_text(rendered + "\n", encoding="utf-8")
 
-    def perform(self):
+    def release_export(self):
+        if self.reservation and self.export:
+            try:
+                if self.export.stat().st_ino == self.reservation:
+                    self.export.unlink()
+            except FileNotFoundError:
+                pass
+        self.reservation = None
+
+    def prepare(self):
+        prompt = list(self.args.prompt)
+        if prompt and prompt[0] == "--":
+            prompt = prompt[1:]
+        if prompt and prompt[0]:
+            self.prompt_text = " ".join(prompt)
+        elif sys.stdin.isatty():
+            raise RunError("Provide a prompt argument after -- or pipe it on stdin")
+        if self.provider == "claude" and self.args.output_schema:
+            try:
+                self.schema = json.loads(Path(self.args.output_schema).read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise RunError(f"--output-schema is not a readable JSON file: {self.args.output_schema}") from exc
         if self.export:
             # Reserve exclusively before launch. Never expose a previous run's file
             # under an expected new output path or overwrite an existing artifact.
@@ -368,6 +451,17 @@ class Run:
                 raise RunError(f"--out already exists: {self.export}; choose an unused path") from exc
             with os.fdopen(fd, "wb") as handle:
                 self.reservation = os.fstat(handle.fileno()).st_ino
+
+    def open_run_dir(self):
+        self.root = Path(tempfile.mkdtemp(prefix=f"{self.provider}-{self.run_id}-")).resolve()
+        self.receipt = self.root / "receipt.json"
+        self.result = self.root / "result.txt"
+        self.data.update(result=str(self.result), receipt=str(self.receipt))
+        collected = collect_finished_run_dirs(self.provider, self.root)
+        if collected:
+            self.data["collected_run_dirs"] = collected
+
+    def perform(self):
         cli = self.resolve_cli()
         if self.provider == "claude" and self.args.auth == "subscription":
             # Compatibility spelling: loggedIn is not a billing/provider attestation.
@@ -375,15 +469,10 @@ class Run:
             if status.get("loggedIn") is not True:
                 raise RunError("Claude reports no login; use its supported login flow", 3)
         argv, cwd = self.command(cli)
-        prompt = self.args.prompt
-        if prompt and prompt[0] == "--":
-            prompt = prompt[1:]
         stdin = None
-        if prompt:
-            argv.append(" ".join(prompt))
+        if self.prompt_text is not None:
+            argv.append(self.prompt_text)
         else:
-            if sys.stdin.isatty():
-                raise RunError("Provide a prompt argument after -- or pipe it on stdin")
             stdin = sys.stdin
             if self.provider == "codex":
                 argv.append("-")
@@ -414,13 +503,18 @@ class Run:
         self.save(result_sha256=digest, output=str(self.export or self.result))
 
     def run(self):
-        self.save()
+        try:
+            self.prepare()
+            self.open_run_dir()
+            self.save()
+        except (RunError, OSError) as exc:
+            self.release_export()
+            print(exc, file=sys.stderr)
+            return exc.code if isinstance(exc, RunError) else 2
         self.marker("START", pid=os.getpid(), receipt=str(self.receipt))
         old_handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
-        def cancel(sig, _frame):
-            raise Cancelled(sig)
         for sig in old_handlers:
-            signal.signal(sig, cancel)
+            signal.signal(sig, self.on_signal)
         rc, status = 0, "DONE"
         try:
             self.perform()
@@ -448,15 +542,16 @@ class Run:
             except OSError as exc:
                 rc, status = 125, "CLEANUP_FAILED"
                 self.data["diagnostic"] = f"Could not complete process cleanup: {type(exc).__name__}"
-            if self.reservation and self.export:
-                try:
-                    if self.export.stat().st_ino == self.reservation:
-                        self.export.unlink()
-                except FileNotFoundError:
-                    pass
-            self.save(status=status, exit_code=rc, finished_at=time.time())
-            self.marker("EXIT", rc=rc, status=status, receipt=str(self.receipt),
-                        output=self.data.get("output"))
+            self.release_export()
+            exit_fields = dict(rc=rc, status=status, receipt=str(self.receipt), output=self.data.get("output"))
+            try:
+                self.save(status=status, exit_code=rc, finished_at=time.time())
+            except OSError as exc:
+                if not rc:
+                    rc, status = 2, "FAILED"
+                self.data["diagnostic"] = f"Could not write the receipt: {type(exc).__name__}: {exc}"
+                exit_fields.update(rc=rc, status=status, receipt_error=type(exc).__name__)
+            self.marker("EXIT", **exit_fields)
             for sig, old in old_handlers.items():
                 signal.signal(sig, old)
         if rc:
@@ -500,10 +595,10 @@ def watch(provider, argv):
             elif hashlib.sha256(result.read_bytes()).hexdigest() != data.get("result_sha256"):
                 status = "MISSING"
         elif status in ("RUNNING", "STARTING"):
+            # The supervisor alone decides TIMEOUT, on its monotonic clock. A live
+            # supervisor past deadline_at is still running its cleanup.
             if not alive(data["pid"]):
                 status = "DIED"
-            elif time.time() > data["deadline_at"] + 4:
-                status = "TIMEOUT"
             else:
                 # Supervisor status changes and heartbeat messages are not workload
                 # progress. Silence may be healthy; QUIET is never proof of a stall.

@@ -1,11 +1,21 @@
 name = "review-orchestrator"
-description = "Run the review-agent orchestrator for an explicit review-agent invocation or a named gate of an explicitly invoked workflow. Resolve scope, check capabilities, collect native and cross-provider findings, and return COMPLETE or INCOMPLETE with evidence."
+description = "Run the review-agent orchestrator for an explicit review-agent invocation or a named gate of an explicitly invoked workflow (orchestrate's Final Review gate). Resolve scope, check capabilities, run checks, select lenses, fan out review-lens children plus the cross-provider leg, validate findings, and return COMPLETE or INCOMPLETE with evidence. Never spawn from ordinary review intent."
 
 developer_instructions = '''
-Read {{SKILLS_ROOT}}/review-agent/SKILL.md in full first. That installed file
-owns this role; its package root is independent of the target repository.
-Read the target project's applicable instructions and optional
-.agents/project-workflow.md. Keep source unchanged.
+You are the review orchestrator defined by {{SKILLS_ROOT}}/review-agent/SKILL.md.
+Read that installed file in full first; it owns this role and its package root
+is independent of the target repository. Read the target project's applicable
+instructions and optional .agents/project-workflow.md. Keep source unchanged.
+
+Follow the skill's Topology and Orchestrator procedure exactly: the caller has
+already handed you the change scope in your prompt. Record it with the skill's
+scope helper, run the deterministic checks, select lenses from the lens map,
+spawn one review-lens child per selected lens (or general-purpose where that
+def is absent) in waves respecting the thread cap, run the cross-provider leg
+through the installed sibling provider helper with the model and effort the
+skill's Provider policy resolves, validate and merge findings from both legs,
+write the report file only where the user or project contract asks for one,
+and return the exact result contract including scope and coverage.
 
 Own the bounded lifecycle and actual results, not just child notifications.
 Check which tools are exposed before spawning: if nested children cannot run,
@@ -14,9 +24,5 @@ and outstanding assignments so the parent can continue. Do not assume messaging,
 SendMessage, resume, or any configuration field exists. If an owned child stops
 without a result, collect accessible results and finish within the run budget;
 report missing coverage as INCOMPLETE. Never return a progress note as COMPLETE.
-
-Use installed sibling provider helpers as specified by the skill and inherit
-user model/effort policy. Validate surviving findings and return the exact
-result contract, including scope and coverage. Do not publish reports or fix
-source automatically.
+Do not publish reports or fix source automatically.
 '''

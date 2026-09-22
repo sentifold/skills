@@ -5,7 +5,10 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -186,19 +189,64 @@ class InstallerTests(unittest.TestCase):
         edited.write_text(edited.read_text() + "# personal change\n")
         before_receipt = self.locations.receipt.read_bytes()
         for uninstall in (False, True):
-            with self.assertRaisesRegex(install.InstallError, "Owned destination was changed"):
+            with self.assertRaisesRegex(install.InstallError, "Owned file was changed; preserve or restore it before proceeding"):
                 self.plan(uninstall=uninstall)
         self.assertIn("personal change", edited.read_text())
         self.assertEqual(self.locations.receipt.read_bytes(), before_receipt)
 
-    def test_owned_symlink_edit_is_preserved(self):
+    def test_retargeted_owned_symlink_needs_adoption_again(self):
         self.perform()
         link = self.home / ".agents/skills/orchestrate"
         link.unlink()
         link.symlink_to("personal replacement")
-        with self.assertRaisesRegex(install.InstallError, "Owned destination was changed"):
-            self.plan(adopt={"orchestrate"})
+        with self.assertRaisesRegex(install.InstallError, "Owned symlink was retargeted; restore it or pass --adopt orchestrate to take it over again"):
+            self.plan()
+        with self.assertRaisesRegex(install.InstallError, "Owned symlink was retargeted; restore it before proceeding"):
+            self.plan(uninstall=True)
         self.assertEqual(os.readlink(link), "personal replacement")
+        plan = self.perform(adopt={"orchestrate"})
+        self.assertEqual([change.label for change in plan.changes], ["adopt symlink", "write ownership receipt"])
+        self.assertEqual(link.resolve(), self.root / "skills/orchestrate")
+        self.perform(uninstall=True)
+        self.assertEqual(os.readlink(link), "personal replacement")
+
+    def test_dotfiles_recreated_links_block_apply_until_adopted_and_never_block_uninstall(self):
+        adopted = self.fixture_link(".agents/skills/orchestrate", "dotfiles/orchestrate")
+        legacy = self.fixture_link(".codex/skills/orchestrate", "dotfiles/legacy orchestrate")
+        self.perform(adopt={"orchestrate"})
+        for round in range(2):
+            adopted.unlink()
+            adopted.symlink_to("dotfiles/orchestrate")
+            legacy.symlink_to("dotfiles/legacy orchestrate")
+            with self.assertRaises(install.InstallError) as error:
+                self.plan()
+            self.assertIn(f"Owned symlink was retargeted; restore it or pass --adopt orchestrate to take it over again before proceeding: {adopted}", str(error.exception))
+            self.assertIn(f"Owned legacy duplicate was recreated; delete it or restore its recorded target or pass --adopt orchestrate to remove it again before proceeding: {legacy}", str(error.exception))
+            if round == 0:
+                plan = self.perform(adopt={"orchestrate"})
+                self.assertEqual({change.label for change in plan.changes}, {"adopt symlink", "remove legacy duplicate"})
+                self.assertEqual(adopted.resolve(), self.root / "skills/orchestrate")
+                self.assertFalse(legacy.is_symlink())
+        plan = self.perform(uninstall=True)
+        self.assertNotIn(adopted, {change.path for change in plan.changes})
+        self.assertEqual(os.readlink(adopted), "dotfiles/orchestrate")
+        self.assertEqual(os.readlink(legacy), "dotfiles/legacy orchestrate")
+        self.assertFalse(self.locations.receipt.exists())
+
+    def test_deleted_owned_link_does_not_block_uninstall(self):
+        self.perform()
+        (self.home / ".agents/skills/orchestrate").unlink()
+        self.perform(uninstall=True)
+        self.assertFalse(self.locations.receipt.exists())
+
+    def test_legacy_directory_is_named_as_duplicate_to_move_aside(self):
+        directory = self.home / ".codex/skills/orchestrate"
+        directory.mkdir(parents=True)
+        (directory / "SKILL.md").write_text("old copy")
+        with self.assertRaisesRegex(install.InstallError, f"Legacy Codex skill duplicates the shared package; move it aside, ordinary files/directories are never removed: {re.escape(str(directory))}"):
+            self.plan()
+        self.assertEqual((directory / "SKILL.md").read_text(), "old copy")
+        self.assert_no_install()
 
     def test_update_then_apply_old_checkout_rolls_back_and_keeps_adoption(self):
         adopted = self.fixture_link(".agents/skills/orchestrate", "before installation")
@@ -352,15 +400,61 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(install.InstallError, "invalid required_files"):
             self.plan()
 
-    def test_plan_prints_symlink_source_destination_and_source_revision(self):
+    def test_plan_prints_link_then_target_previous_targets_and_source_revision(self):
+        self.fixture_link(".agents/skills/orchestrate", "old orchestrate")
+        self.fixture_link(".codex/skills/review-agent", "old legacy review")
         environment = {"CODEX_HOME": str(self.locations.codex), "CLAUDE_CONFIG_DIR": str(self.locations.claude)}
         revision = "a" * 40
         with patch.object(install, "ROOT", self.root), patch.dict(os.environ, environment), \
                 patch.object(install, "source_revision", return_value=revision), redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(install.main(["plan", "--home", str(self.home)]), 0)
-        self.assertIn(f"Source: {self.root} (Git {revision})", output.getvalue())
-        self.assertIn(f"{self.root / 'skills/orchestrate'} -> {self.home / '.agents/skills/orchestrate'}", output.getvalue())
-        self.assertFalse(self.home.exists())
+            self.assertEqual(install.main(["plan", "--home", str(self.home), "--adopt", "orchestrate", "--adopt", "review-agent"]), 0)
+        text = output.getvalue()
+        self.assertIn(f"Source: {self.root} (Git {revision})", text)
+        self.assertIn("Packages: claude: claude-stock-code-review, codex, github-create-pr, orchestrate, review-agent; "
+                      "codex: claude, github-create-pr, orchestrate, review-agent", text)
+        self.assertIn(f"install/update: {self.home / '.claude/skills/orchestrate'} -> {self.root / 'skills/orchestrate'}\n", text)
+        self.assertIn(f"adopt symlink: {self.home / '.agents/skills/orchestrate'} -> {self.root / 'skills/orchestrate'} (was -> old orchestrate)\n", text)
+        self.assertIn(f"remove legacy duplicate: {self.home / '.codex/skills/review-agent'} (was -> old legacy review)\n", text)
+        self.assertFalse(self.locations.receipt.exists())
+
+    def test_package_selection_installs_the_dependency_closure_only(self):
+        with patch.object(install, "ROOT", self.root), redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(install.main(["apply", "--home", str(self.home), "--package", "github-create-pr"]), 0)
+        self.assertIn("Packages: claude: github-create-pr; codex: github-create-pr", output.getvalue())
+        self.assertTrue((self.home / ".agents/skills/github-create-pr").is_symlink())
+        self.assertFalse((self.home / ".agents/skills/orchestrate").exists())
+        self.assertFalse((self.home / ".codex/agents").exists())
+        self.assertFalse((self.home / ".claude/agents").exists())
+        plan = self.perform(packages={"review-agent"})
+        self.assertEqual(plan.packages, {"codex": ["claude", "review-agent"], "claude": ["codex", "review-agent"]})
+        self.assertEqual(plan.agents, {"codex": ["review-lens", "review-orchestrator"], "claude": ["review-lens", "review-orchestrator"]})
+        self.assertFalse((self.home / ".agents/skills/github-create-pr").exists())
+        self.assertTrue((self.home / ".agents/skills/claude").is_symlink())
+        self.assertTrue((self.home / ".codex/agents/review-orchestrator.toml").is_file())
+        plan = self.perform(packages={"claude-stock-code-review"}, selected={"claude"})
+        self.assertEqual(plan.packages, {"claude": ["claude-stock-code-review", "codex", "review-agent"]})
+        self.assertTrue((self.home / ".agents/skills/review-agent").is_symlink())
+        self.assertEqual(self.plan(packages={"review-agent"}, selected={"codex"}).changes, [])
+        with self.assertRaisesRegex(install.InstallError, "Unknown --package names: typo"):
+            self.plan(packages={"typo"})
+        with self.assertRaisesRegex(install.InstallError, "Packages not available for the selected runtimes: claude"):
+            self.plan(packages={"claude"}, selected={"claude"})
+
+    def test_symlinked_home_spelling_is_one_installation(self):
+        real = self.base / "real home"
+        real.mkdir()
+        alias = self.base / "home alias"
+        alias.symlink_to(real, target_is_directory=True)
+        via_alias = install.Locations(alias, alias / ".codex", alias / ".claude")
+        via_real = install.Locations(real, real / ".codex", real / ".claude")
+        self.perform(locations=via_alias)
+        self.assertEqual(self.plan(locations=via_real).changes, [])
+        self.assertEqual(self.plan(locations=via_alias).changes, [])
+        receipt = json.loads(via_real.receipt.read_text())
+        self.assertTrue(all(key.startswith(f"{real}/") for key in receipt["entries"]), list(receipt["entries"]))
+        self.perform(locations=via_real, uninstall=True)
+        self.assertFalse((real / ".agents/skills/orchestrate").is_symlink())
+        self.assertFalse(via_alias.receipt.exists())
 
     def test_missing_agent_reference_is_rejected(self):
         agent = self.root / "agents/codex/review-lens.toml"
@@ -393,15 +487,17 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.locations.receipt.read_bytes(), before)
         self.assertEqual(self.plan(selected={"codex"}).changes, [])
 
-    def test_custom_root_move_cannot_alias_old_owned_destinations(self):
+    def test_aliased_spelling_of_an_owned_root_is_the_same_installation(self):
         self.perform(selected={"claude"})
         before = self.locations.receipt.read_bytes()
         alias = self.base / "moved claude root"
         alias.symlink_to(self.locations.claude, target_is_directory=True)
         locations = install.Locations(self.home, self.locations.codex, alias)
-        with self.assertRaisesRegex(install.InstallError, "Runtime destinations overlap"):
-            self.plan(selected={"claude"}, locations=locations)
+        self.assertEqual(self.plan(selected={"claude"}, locations=locations).changes, [])
         self.assertEqual(self.locations.receipt.read_bytes(), before)
+        self.perform(selected={"claude"}, locations=locations, uninstall=True)
+        self.assertFalse((self.locations.claude / "skills/orchestrate").is_symlink())
+        self.assertFalse(self.locations.receipt.exists())
 
     def test_uninstall_detects_aliased_retained_runtime_receipt_entries(self):
         self.perform()
@@ -506,7 +602,148 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(install.main(["doctor", "--home", str(self.home)]), 0)
             run.assert_not_called()
             self.assertIn("CLI missing from PATH", output.getvalue())
-            self.assertIn("config was preserved", output.getvalue())
+            self.assertIn("config.toml not found", output.getvalue())
+            self.assertIn("Verified: installed links and rendered agents match this checkout.", output.getvalue())
+            self.assertIn("codex: packages claude, github-create-pr, orchestrate, review-agent; agents review-lens, review-orchestrator; "
+                          "no legacy duplicates in the old Codex skill roots", output.getvalue())
+
+    def test_doctor_reads_codex_nesting_configuration(self):
+        self.perform()
+        config = self.locations.codex / "config.toml"
+        cases = [
+            ("[features]\nmulti_agent = true\n[agents]\nmax_depth = 2\n", [], "Codex config: multi_agent enabled, agents.max_depth = 2"),
+            ("[features]\nmulti_agent = true\n", ["agents.max_depth is not set"], None),
+            ("[agents]\nmax_depth = 1\n", ["multi_agent is not enabled", "agents.max_depth = 1"], None),
+            ("multi_agent = [broken", ["cannot read"], None),
+        ]
+        environment = {"CODEX_HOME": str(self.locations.codex), "CLAUDE_CONFIG_DIR": str(self.locations.claude)}
+        for text, expected_warnings, expected_status in cases:
+            with self.subTest(config=text):
+                config.write_text(text)
+                with patch.object(install, "ROOT", self.root), patch.dict(os.environ, environment), \
+                        patch.object(install.shutil, "which", return_value=None), redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(install.main(["doctor", "--home", str(self.home)]), 0)
+                codex_warnings = [line for line in output.getvalue().splitlines() if line.startswith("WARNING: Codex:")]
+                self.assertEqual(len(codex_warnings), len(expected_warnings), codex_warnings)
+                for warning, fragment in zip(codex_warnings, expected_warnings):
+                    self.assertIn(fragment, warning)
+                if expected_status:
+                    self.assertIn(expected_status, output.getvalue())
+        self.assertEqual(config.read_text(), cases[-1][0])
+
+    def crash_apply(self, writes_before_crash, after_last_write=False, adopt=("orchestrate",)):
+        driver = f"""
+import os, sys
+from pathlib import Path
+sys.path.insert(0, {str(Path(install.__file__).parent)!r})
+import install
+real = install.write_state
+calls = 0
+def crash(path, state):
+    global calls
+    if path.name == "journal.json":
+        return real(path, state)
+    calls += 1
+    if calls > {writes_before_crash}:
+        os._exit(137)
+    real(path, state)
+    if {after_last_write!r} and calls == {writes_before_crash}:
+        os._exit(137)
+install.write_state = crash
+locations = install.Locations(Path({str(self.home)!r}), Path({str(self.locations.codex)!r}), Path({str(self.locations.claude)!r}))
+install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "claude"}}, adopt=set({list(adopt)!r})))
+"""
+        result = subprocess.run([sys.executable, "-c", driver], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 137, result.stderr)
+        journal = json.loads(self.locations.journal.read_text())
+        self.assertEqual(len(journal["changes"]), 13)
+        self.assertNotIn(str(self.locations.receipt), {change["path"] for change in journal["changes"]})
+        return journal
+
+    def test_hard_crash_leaves_a_journal_and_the_next_plan_recovers_written_changes(self):
+        adopted = self.fixture_link(".agents/skills/orchestrate", "before installation")
+        journal = self.crash_apply(writes_before_crash=5)
+        self.assertEqual(adopted.resolve(), self.root / "skills/orchestrate")
+        self.assertTrue((self.locations.claude / "agents/review-lens.md").is_file())
+        self.assertFalse((self.locations.claude / "agents/review-orchestrator.md").exists())
+        self.assertFalse(self.locations.receipt.exists())
+        self.assertTrue(self.locations.lock.is_dir())
+        self.assertEqual(journal["entries"][str(adopted)]["restore"], "before installation")
+        plan = self.plan()
+        self.assertEqual(plan.recovered_pid, journal["pid"])
+        self.assertIn("5 of 13 journaled changes had been written and are owned again", plan.notes[0])
+        self.assertNotIn(adopted, {change.path for change in plan.changes})
+        self.assertNotIn(self.locations.claude / "agents/review-lens.md", {change.path for change in plan.changes})
+        self.assertIn(self.locations.claude / "agents/review-orchestrator.md", {change.path for change in plan.changes})
+        install.apply(plan)
+        self.assertFalse(self.locations.lock.exists())
+        self.assertEqual(self.plan().changes, [])
+        receipt = json.loads(self.locations.receipt.read_text())
+        self.assertEqual(receipt["entries"][str(adopted)]["restore"], "before installation")
+        self.assertEqual(len(receipt["entries"]), 13)
+        self.perform(uninstall=True)
+        self.assertEqual(os.readlink(adopted), "before installation")
+        self.assertFalse((self.locations.claude / "agents/review-lens.md").exists())
+
+    def test_uninstall_after_a_hard_crash_restores_the_adopted_link_and_removes_written_files(self):
+        adopted = self.fixture_link(".agents/skills/orchestrate", "before installation")
+        self.crash_apply(writes_before_crash=5)
+        plan = self.plan(uninstall=True)
+        self.assertIsNotNone(plan.recovered_pid)
+        install.apply(plan)
+        self.assertEqual(os.readlink(adopted), "before installation")
+        self.assertFalse((self.home / ".agents/skills/claude").exists())
+        self.assertFalse((self.locations.claude / "agents/review-lens.md").exists())
+        self.assertFalse(self.locations.receipt.exists())
+        self.assertFalse(self.locations.lock.exists())
+
+    def test_crash_before_any_write_and_after_the_receipt_both_recover_cleanly(self):
+        self.crash_apply(writes_before_crash=0)
+        self.assertFalse((self.home / ".agents/skills/orchestrate").exists())
+        plan = self.plan()
+        self.assertIn("0 of 13 journaled changes", plan.notes[0])
+        self.assertEqual(len(plan.changes), 14)
+        install.apply(plan)
+        self.assertFalse(self.locations.lock.exists())
+        self.assertEqual(self.plan().changes, [])
+        shutil.rmtree(self.home)
+        self.crash_apply(writes_before_crash=14, after_last_write=True)
+        self.assertTrue(self.locations.receipt.exists())
+        plan = self.plan()
+        self.assertEqual(plan.changes, [])
+        self.assertIsNotNone(plan.recovered_pid)
+        with patch.object(install, "ROOT", self.root), redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(install.main(["doctor", "--home", str(self.home)]), 1)
+        self.assertIn("run apply to complete its recovery", output.getvalue())
+        install.apply(plan)
+        self.assertFalse(self.locations.lock.exists())
+        self.assertEqual(self.plan().changes, [])
+
+    def test_destination_changed_after_a_crash_is_reported_not_owned(self):
+        self.crash_apply(writes_before_crash=5)
+        link = self.home / ".agents/skills/review-agent"
+        link.unlink()
+        link.symlink_to("edited after crash")
+        with self.assertRaisesRegex(install.InstallError, f"Destination changed after an interrupted install; restore its journaled state before proceeding: {re.escape(str(link))}"):
+            self.plan()
+        self.assertEqual(os.readlink(link), "edited after crash")
+
+    def test_journal_of_a_running_install_is_never_taken_over(self):
+        self.locations.lock.mkdir(parents=True)
+        journal = {"schema_version": 1, "pid": os.getppid(), "entries": {}, "changes": []}
+        self.locations.journal.write_text(json.dumps(journal))
+        with self.assertRaisesRegex(install.InstallError, f"Another install is running \\(pid {os.getppid()}\\)"):
+            self.plan()
+        self.assertTrue(self.locations.journal.exists())
+        self.assert_no_install()
+
+    def test_journal_appearing_after_the_plan_requires_a_new_plan(self):
+        plan = self.plan()
+        self.crash_apply(writes_before_crash=0)
+        with self.assertRaisesRegex(install.InstallError, "left a journal after this plan was prepared; run plan again"):
+            install.apply(plan)
+        self.assertTrue(self.locations.journal.exists())
+        self.assert_no_install()
 
 
 if __name__ == "__main__":
