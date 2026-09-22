@@ -1,0 +1,6 @@
+interface:
+  display_name: "Create GitHub PR"
+  short_description: "Create or update a PR from the full branch diff and check results."
+  default_prompt: "Use $github-create-pr to inspect the full branch diff, resolve the target repository and base, run the project's required formatting and checks for modified files, and create or update the GitHub PR with the project's helper or gh."
+policy:
+  allow_implicit_invocation: true

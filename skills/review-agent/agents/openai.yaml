@@ -1,0 +1,6 @@
+interface:
+  display_name: "Layered Review"
+  short_description: "Review exact changes with native and cross-provider evidence."
+  default_prompt: "Use $review-agent to review this change and report verified findings and coverage."
+policy:
+  allow_implicit_invocation: false

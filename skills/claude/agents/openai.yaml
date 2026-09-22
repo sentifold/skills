@@ -1,0 +1,7 @@
+interface:
+  display_name: "Claude"
+  short_description: "Run Claude Code in an isolated subprocess"
+  default_prompt: "Use $claude to run Claude Code headlessly for an independent analysis, a cross-provider review leg, or an implementation handoff."
+
+policy:
+  allow_implicit_invocation: true
