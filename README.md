@@ -33,7 +33,7 @@ skill directories is insufficient.
 ```sh
 git clone https://github.com/sentifold/skills.git "$HOME/.local/share/sentifold-skills-source"
 cd "$HOME/.local/share/sentifold-skills-source"
-# For a consumer project, check out its shared-skills.lock.json revision first.
+# Check out the release the team agreed on (a tag or main).
 python3 install.py plan --runtime both
 python3 install.py apply --runtime both
 python3 install.py doctor --runtime both
@@ -53,8 +53,7 @@ configuration.
 - Ownership receipt: `<home>/.local/share/sentifold-skills-state/receipt.json`,
   keyed by resolved destination path, so a symlinked home or `/var` versus
   `/private/var` spelling is one installation. This directory holds only the
-  installer's own state; the source checkout and the bootstrap cache live
-  elsewhere.
+  installer's own state; the source checkout lives elsewhere.
 - `--runtime codex` or `claude` installs only that runtime's complete set.
 - `--package NAME` (repeatable) installs that package plus everything its
   `requires` closure names for each selected runtime, and the agents whose
@@ -103,7 +102,7 @@ these links intact. This repo does not silently edit another dotfiles repository
 
 Do not keep project-local copies of the six shared packages or review agents in
 a migrated project: they shadow the installed version. Migrate a consumer only
-with its project policy and bootstrap instructions in the same change.
+with its project profile and an install pointer in its README in the same change.
 
 ## Use in a project
 
@@ -143,10 +142,9 @@ For Codex it reads `config.toml` and warns only when `features.multi_agent` or
 
 Run tests in a new checkout, then run its installer with the same home/runtime
 roots. Owned links and rendered agents switch together. To roll back, run the
-previous checkout's `install.py apply` with those same arguments (a bootstrap
-cache keeps it at `~/.cache/sentifold-skills/<old-rev>/install.py`). Keep both
-checkouts until the new release has passed the project's smoke task. For a pinned
-consumer, update its lock through a reviewed PR and use its bootstrap command.
+previous checkout's `install.py apply` with those same arguments. Keep both
+checkouts until the new release has passed the project's smoke task. Projects
+do not pin a revision: the team moves to a release together.
 
 `python3 install.py uninstall` removes only unchanged owned objects and restores
 adopted symlinks. Modified files block the transaction. No automatic updates run
