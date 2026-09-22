@@ -6,7 +6,7 @@ without a gamejam checkout.
 
 1. **Access and version.** The participant checks access to the private
    `sentifold/skills`, Python 3.11+, Bash and the CLI of each runtime they use.
-   They use a reviewed commit; for gamejam that is `.agents/shared-skills.lock.json`.
+   They use the release the team agreed on (a tag or `main`).
    Authentication stays personal.
 2. **Sources.** Run `install.py plan --runtime both` (or one runtime) and read the
    real source/destination paths. With dotfiles in place, transfer ownership of
@@ -37,8 +37,7 @@ without a gamejam checkout.
    missing SendMessage must produce recovery or an honest INCOMPLETE, never a
    hang or a fake successful review.
 7. **Update and rollback.** Install a newer version from another checkout, then
-   return to the previous one through its `install.py apply` (for gamejam,
-   `Scripts/setup-shared-skills.py --revision <old-commit> apply`). Run the usual
+   return to the previous one through its `install.py apply`. Run the usual
    dotfiles sync and `doctor` again: the old sources must not take the links
    back; if they do, `plan` names the entry and the action (restore, delete the
    recreated legacy link, or repeat `--adopt NAME`).
@@ -53,8 +52,9 @@ inside the project checkout.
 
 1. **Install the pinned release per the README.** From a `sentifold/skills`
    checkout at a reviewed commit: `python3 install.py plan --runtime both`, then
-   `apply` and `doctor` with the same `--home`/`--runtime`. A project with a pin
-   file (step 5) runs its own bootstrap instead.
+   `apply` and `doctor` with the same `--home`/`--runtime`. The project's README
+   says only that the shared skills must be installed; it carries no copy, pin
+   or bootstrap of its own.
 2. **Create the profile.** Copy `templates/project-workflow.md` from the release
    to the project's `.agents/project-workflow.md` (create `.agents/` if missing;
    sleash currently has no `.agents/`, `.claude/` or `.codex/`) and replace every
@@ -80,21 +80,11 @@ inside the project checkout.
    `REVIEW INCOMPLETE` and a reason. If `## Provider policy` is left as `ask`,
    the run stops at the model question; that is expected. Answer explicitly or
    fill the section with models.
-5. **Pin file (optional).** A project that needs a fixed revision repeats the
-   gamejam scheme: `.agents/shared-skills.lock.json` with `version`, `repository`,
-   `revision` (full commit) and `packages`, plus a bootstrap
-   `Scripts/setup-shared-skills.py {plan,apply,doctor,uninstall,run}` with
-   `--revision <commit>` and `--cache-dir`, which clones the release into
-   `$XDG_CACHE_HOME/sentifold-skills/<revision>` (default
-   `~/.cache/sentifold-skills/<revision>`), verifies it and runs `install.py`
-   with the lock's `--package` list. Other projects may copy this scheme or rely
-   on the installed release.
-6. **Update and rollback.** A new revision: `install.py apply` from the new
-   checkout with the same roots (or a PR with the new `revision` in the lock,
-   then the bootstrap `apply`). Rollback: `install.py apply` from the previous
-   checkout; for pinned projects the bootstrap `--revision <previous-commit>
-   apply`. Then `doctor` and the smoke from step 4.
-7. **Where fixes go.** The shared workflow, scripts and template: a PR to
+5. **Update and rollback.** A new revision: `install.py apply` from the new
+   checkout with the same roots. Rollback: `install.py apply` from the previous
+   checkout. Then `doctor` and the smoke from step 4. Sandbox and CI containers
+   with their own home install the same release into that home.
+6. **Where fixes go.** The shared workflow, scripts and template: a PR to
    `sentifold/skills`. A project's base, checks, executors and report paths: a
    PR to its `.agents/project-workflow.md`.
 
