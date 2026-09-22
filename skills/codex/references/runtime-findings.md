@@ -35,6 +35,20 @@ to fallback metadata`.
 check a different model's supported efforts before overriding them. See the
 [official Astra guide](https://developers.openai.com/api/docs/guides/latest-model).
 
+**New sibling models (added 2026-09):** `gpt-6-sol` is the mid-tier model --
+"built to power complex coding and agentic workflows," cheaper/faster than
+`gpt-6-astra` -- and `gpt-6-luna` is the cheapest/fastest tier, for
+high-volume/low-depth tasks; both list `none` as a supported effort alongside
+`low`, `medium`, `high`, `xhigh`, `max` (Astra does not support `none`). Source:
+the [models reference](https://developers.openai.com/api/docs/models). `gpt-6-sol`
+is a reasonable default for an implementation/bulk leg that does not need
+Astra-grade judgment. Directly verified through this helper: `--model gpt-6-sol
+--effort low` is accepted by this login and completes (2026-09-23); its other
+listed efforts were not each individually re-verified here, only sourced from
+the reference above -- same caveat for every `gpt-6-luna` effort. As always,
+take the model from `~/.codex/config.toml` rather than guessing account access
+from the family name.
+
 ## Speed is per invocation
 
 Map a requested `fast` run to `--fast`, and `nofast` / Standard to `--no-fast`.
