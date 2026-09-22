@@ -121,7 +121,7 @@ profiling consent, platform policy and measured review priorities in its profile
 **Connect a project:** copy [templates/project-workflow.md](templates/project-workflow.md)
 to the project's `.agents/project-workflow.md`, fill every placeholder from
 that checkout's own instructions, and follow the numbered procedure in
-[docs/onboarding.md](docs/onboarding.md#подключение-проекта-connect-a-project)
+[docs/onboarding.md](docs/onboarding.md#connect-a-project)
 (install, profile, Codex `agents.max_depth = 2`, smoke run, optional pin file,
 update/rollback).
 
