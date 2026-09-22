@@ -21,7 +21,7 @@ Linear and Mermaid are outside this release; `pr-arch-review` is retired.
 ## Install
 
 Requirements: Python **3.11+**, Git, Bash, POSIX `ps` with
-`ps -axo pid=,pgid=,stat=` support, access to this private repo, and the
+`ps -axo pid=,pgid=,stat=` and `ps -o stat= -p <pid>` support, access to this private repo, and the
 CLI for each runtime you use. Provider helpers require a POSIX process model
 (macOS/Linux); native Windows is not qualified by this release. Authentication
 and model availability remain personal runtime settings.

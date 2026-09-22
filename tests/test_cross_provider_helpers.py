@@ -366,6 +366,24 @@ class CrossProviderHelpersTests(unittest.TestCase):
         with mock.patch.object(RUNTIME.tempfile, 'mkdtemp', return_value=str(root)):
             return RUNTIME.Run('codex', args)
 
+    def test_leader_exit_is_detected_without_waitid_and_leaves_it_unreaped(self):
+        # macOS interpreters before 3.13 have no os.waitid; the ps path must agree.
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)
+        try:
+            with mock.patch.object(RUNTIME, 'LEADER_WAITID', None):
+                self.assertFalse(RUNTIME.Run.child_exited(child))
+                child.terminate()
+                until = time.monotonic() + 3
+                while not RUNTIME.Run.child_exited(child) and time.monotonic() < until:
+                    time.sleep(.01)
+                self.assertTrue(RUNTIME.Run.child_exited(child))
+                self.assertIsNone(child.returncode)
+                child.wait(timeout=3)
+                self.assertTrue(RUNTIME.Run.child_exited(child))
+        finally:
+            child.kill()
+            child.wait(timeout=3)
+
     def test_darwin_zombie_only_group_eperm_is_verified_before_reaping(self):
         run = self.lifecycle_fixture()
         child = subprocess.Popen([sys.executable, '-c', 'pass'], start_new_session=True)

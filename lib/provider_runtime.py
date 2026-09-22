@@ -86,6 +86,24 @@ def alive(pid):
         return True
 
 
+# CPython exposes os.waitid on macOS only from 3.13; older interpreters read the
+# leader's state from ps, and that fork is why their polling backs off.
+LEADER_WAITID = getattr(os, "waitid", None)
+EXIT_POLL_START = .03
+EXIT_POLL_LIMIT = .03 if LEADER_WAITID else .25
+
+
+def leader_state(pid):
+    try:
+        snapshot = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  text=True, timeout=2, start_new_session=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RunError(f"Cannot verify owned child {pid}: {type(exc).__name__}",
+                       125, "CLEANUP_FAILED") from exc
+    return snapshot.stdout.strip()[:1]
+
+
 class Run:
     def __init__(self, provider, args):
         self.provider, self.args = provider, args
@@ -122,7 +140,9 @@ class Run:
     def child_exited(process):
         # Keep the leader unreaped until its group is cleaned. This retains its
         # PID and prevents group-id reuse while we still own descendant cleanup.
-        return os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+        if LEADER_WAITID is not None:
+            return LEADER_WAITID(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+        return leader_state(process.pid) in ("", "Z")
 
     def live_group_members(self, pgid):
         try:
@@ -205,11 +225,13 @@ class Run:
                       stdout=str(out), stderr=str(err))
             process = self.child
             end = min(self.deadline, time.monotonic() + limit) if limit else self.deadline
+            interval = EXIT_POLL_START
             try:
                 while not self.child_exited(process):
                     if time.monotonic() >= end:
                         raise RunError(f"{label} exceeded its deadline; inspect {err}", 124, "TIMEOUT")
-                    time.sleep(.03)
+                    time.sleep(interval)
+                    interval = min(interval * 1.5, EXIT_POLL_LIMIT)
             finally:
                 self.cleanup()
         return process.returncode, out, err
