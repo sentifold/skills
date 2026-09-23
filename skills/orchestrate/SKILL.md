@@ -268,7 +268,7 @@ resolve it the way the **`github-create-pr` skill** does (stack parent,
 `branch.<name>.gh-merge-base`, then the verified remote default) — no branch
 name is universal. Stack them as a chain when there are dependencies (each PR
 targets the previous branch in the chain — see the **`github-create-pr`
-skill**, "Dependent changes"). Follow the project profile's branch-naming
+skill**, "PR Chains"). Follow the project profile's branch-naming
 policy; absent one, the caller runtime's own convention applies unless the
 user asks for another name.
 
@@ -373,9 +373,7 @@ legs — the third is sized to the diff and may fold into the first:
    **`/claude-stock-code-review`** — the shared model-invocable copy of
    Claude Code's stock `/code-review`
    ([`claude-stock-code-review`](../claude-stock-code-review/SKILL.md); it runs as a forked
-   background subagent), shipped under its own name because the stock skill
-   is user-only since Claude Code v2.1.215 and skill authorization does not
-   chain. **Pass the lane's exact range as the argument**
+   background subagent). **Pass the lane's exact range as the argument**
    (`<lane-base>...HEAD`, the base SHA recorded at lane fork): with no
    argument its diff defaults to `@{upstream}...HEAD`, which reviews
    nothing once the lane's draft-PR branch is pushed. If the copy is
@@ -683,12 +681,12 @@ auto-merge**: readying PRs is the orchestrator's job, merging is the user's.
 A review or implementation request alone never implies merge, deployment,
 external report publication, or messages to teammates.
 Report the ready PRs and merge only on explicit instruction, then follow the
-chain mechanics below. Confirm the body still reflects the whole branch:
-`## Summary` (plus an optional minimal plain-text schematic when useful) /
-`## Why` / `## Testing` (the actual clean-state commands and verdict). When a
+chain mechanics below. Confirm the body still reflects the whole branch, in the
+`github-create-pr` body shape, with `## Testing` naming the actual clean-state
+commands and verdict. When a
 stacked chain merges, retarget each downstream PR onto its new base **before**
 merging the one below it, then restack with a lease-guarded force-push (see
-github-create-pr "Dependent changes"). Never merge a PR before retargeting the PR
+github-create-pr "PR Chains"). Never merge a PR before retargeting the PR
 stacked above it.
 
 ## Gates summary
