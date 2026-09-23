@@ -4,12 +4,12 @@ description: >-
   Multi-angle first-order correctness review of the current change scope:
   five correctness finder angles plus
   reuse/simplification/efficiency/altitude/conventions, one-vote
-  verification, a gap sweep, and a ranked ReportFindings report. Copy of
-  Claude Code's stock /code-review (which is user-only since v2.1.215),
-  kept under its own name so the stock skill stays live for user
-  invocations while this copy is model-invocable. Invoke for an explicitly
-  requested first-order review or the orchestrate Code Review gate's
-  first-order leg; do not auto-trigger from ambient review intent.
+  verification, a gap sweep, and a ranked ReportFindings report. A
+  model-invocable copy of Claude Code's stock /code-review, pinned to its
+  max-effort tier; the stock code-review skill is the per-effort-level
+  original. Invoke for an explicitly requested first-order review or the
+  orchestrate Code Review gate's first-order leg; do not auto-trigger from
+  ambient review intent.
 disable-model-invocation: false
 context: fork
 agent: general-purpose
