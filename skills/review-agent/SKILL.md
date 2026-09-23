@@ -230,14 +230,10 @@ Read the sibling provider skill before invoking its helper. From Codex use
 `$SKILLS_ROOT/claude/scripts/claude-ephemeral.sh`; from Claude use
 `$SKILLS_ROOT/codex/SKILL.md` and
 `$SKILLS_ROOT/codex/scripts/codex-ephemeral.sh`. Do not look for those files in
-the target repository. Use `--cd "$PROJECT_ROOT"` and an absolute native output
-path (drive-rooted such as `C:/...` on Windows, slash-rooted on POSIX) in a fresh private
-temporary directory. Under Git Bash a `/tmp/...` argument is path-translated
-into the Git installation, the write fails, and the run can still exit `rc=0` —
-the one failure that genuinely looks like success. So never treat `rc=0` as
-proof the leg landed: verify the `--out` file is non-empty, and if it is
-missing, re-read the run's tail for that write error before concluding anything
-about the review itself. Pass prompt text without shell interpolation hazards;
+the target repository. Use `--cd "$PROJECT_ROOT"` and an absolute, unused
+`--out` path in a fresh private temporary directory. Judge whether the leg
+landed from the helper's receipt (`status`, `diagnostic`, the result file), not
+from the exit code alone. Pass prompt text without shell interpolation hazards;
 follow the selected helper's supported arguments.
 
 For review, request read-only permissions and the minimum required tools. Do
