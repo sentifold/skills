@@ -321,12 +321,14 @@ class Run:
         flags = ["exec", "--help"] if self.provider == "codex" else ["--help"]
         help_text = self.probe(cli, flags, "capabilities")
         required = ("--ephemeral", "--sandbox", "--model", "--output-last-message") if self.provider == "codex" else (
-            "--no-session-persistence", "--output-format", "--max-turns", "--permission-mode",
+            "--no-session-persistence", "--output-format", "--permission-mode",
             "--allowedTools", "--tools", "--strict-mcp-config", "--mcp-config", "--model",
             "--disable-slash-commands", "--no-chrome")
         if self.args.effort and self.provider == "claude":
             required += ("--effort",)
         missing = [flag for flag in required if flag not in help_text]
+        if self.provider == "claude" and "--max-turns" not in help_text and not self.max_turns_supported(cli):
+            missing.append("--max-turns")
         if missing:
             raise RunError(f"Selected {self.provider} ({version[0][:80]}) lacks capabilities: {', '.join(missing)}. "
                            "Update this installation through its wrapper; keep CLI and any companion (such as "
@@ -338,6 +340,22 @@ class Run:
                                "Repair the selected CLI installation and its matching resources.")
             self.save(companion=str(companion), companion_check="executable-only; version compatibility unverified")
         return cli
+
+    def max_turns_supported(self, cli):
+        # Claude Code stopped listing --max-turns in `--help` (observed on
+        # 2.1.280, 2026-09-23) while still honoring it: `claude -p --max-turns
+        # 1 ...` still runs a real, single-turn-bounded session. A text search
+        # can no longer tell "removed" from "merely undocumented", so this is
+        # a fallback functional check, run only when the text search already
+        # came up empty. It asks the parser directly: closed stdin and no
+        # prompt make `-p` fail locally ("Input must be provided...", verified
+        # in under 2s with no network attempt) before any network/model call
+        # either way, but only a genuinely unrecognized flag answers "unknown
+        # option" -- that still fails the run below, with no fallback.
+        _, _, err = self.execute(
+            [cli, "-p", "--no-session-persistence", "--output-format", "json", "--max-turns", "1"],
+            "maxturns", limit=self.args.preflight_timeout)
+        return "unknown option" not in err.read_text(encoding="utf-8", errors="replace").lower()
 
     def command(self, cli):
         a = self.args

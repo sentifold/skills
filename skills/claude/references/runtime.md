@@ -114,7 +114,15 @@ terminate a process tree.
 Known limits: the capability probe matches literal flag names in
 `claude --help` (including `--no-chrome` and, with `--effort`, `--effort`), so
 paged or localized help and older CLIs fail the run without fallback.
-Interpreters without `os.waitid` fork `ps` on every poll tick for the whole
-run; prefer CPython 3.13+ for long runs. The supervisor is single-threaded
-(signal handlers plus a `preexec_fn`); `Run` is not safe to drive from a
-threaded harness.
+`--max-turns` is the one exception: Claude Code stopped listing it in
+`--help` while still honoring it (observed on 2.1.280, 2026-09-23 -- neither
+`claude --help` nor `claude -p --help` mentions it, but `claude -p --max-turns
+1 ...` still runs a real, single-turn-bounded session). A missing `--max-turns`
+in the help text therefore falls back to a functional probe -- a closed-stdin,
+promptless `-p` invocation that fails locally before any network/model call
+either way, distinguishing "unknown option" (truly unsupported) from any other
+local failure (supported but undocumented) -- instead of failing the run on
+text absence alone. Interpreters without `os.waitid` fork `ps` on every poll
+tick for the whole run; prefer CPython 3.13+ for long runs. The supervisor is
+single-threaded (signal handlers plus a `preexec_fn`); `Run` is not safe to
+drive from a threaded harness.
