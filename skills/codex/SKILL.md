@@ -44,6 +44,10 @@ noise lines.
 - Default: `--sandbox read-only`. Use `workspace-write` only for an authorized
   implementation handoff. `danger-full-access` is accepted only when the caller
   explicitly chooses it; no automatic escalation or retry changes sandbox/model.
+  The one legitimate reason to choose it for an analysis run is a Linux host
+  that denies bubblewrap user namespaces (the sandboxed run reads nothing and
+  still answers; see runtime-findings). Pair it with a hard read-only line in
+  the prompt and a `git status --porcelain` check afterwards.
 - Choose `--cli /exact/executable` or `CODEX_BIN`; otherwise use the first PATH
   `codex`. A broken wrapper fails with a diagnostic; the helper never skips it
   for another installation or a binary inside an app bundle.

@@ -241,6 +241,25 @@ not broaden permissions, switch to metered credentials, or grant implementation
 access to recover a failed review. A helper's intended permissions are not
 proof of enforcement: use its preflight/result metadata and report limitations.
 
+One host condition is the exception, because there the sandbox itself is the
+failure: on Linux hosts that deny unprivileged user namespaces (containers,
+`kernel.apparmor_restrict_unprivileged_userns=1`, hardened kernels) Codex's
+bubblewrap sandbox kills every command before it runs, and the model answers
+from the prompt alone — exit 0, a fluent verdict, no file citations. See the
+codex skill's `references/runtime-findings.md` (bubblewrap silent-success
+trap). Detect it before the leg with `bwrap --dev-bind / / --unshare-net true`
+and after it by grepping the run's `provider.stdout`/`provider.stderr` for
+`bwrap:`. On such a host run the Codex leg with `--sandbox danger-full-access`
+**only if** the target profile's `## Provider policy` declares
+`Codex sandbox: danger-full-access (bubblewrap denied)` or the user says so for
+this run; put a HARD CONSTRAINT line in the prompt ("read-only reviewer — no
+file writes, no git mutations, no builds"), snapshot `git status --porcelain`
+before and confirm it is unchanged after, and state in the report that the
+sandbox was prompt-enforced, not kernel-enforced. Without that authorization
+the leg is INCOMPLETE with the `bwrap:` line as the specific failure; never
+escalate silently, and never treat a fluent verdict with no file citations as
+coverage.
+
 Track start/timeout/completion using the provider's runner/watch contract.
 Successful process exit alone is not a completed review: require a valid final
 answer for the assigned scope. If the provider cannot start, authenticate, or
