@@ -39,12 +39,23 @@ effort, plus an optional CLI selection when the default executable is wrong:
 
 - Codex leg: model `<exact model id>`, effort `<effort>`.
 - Claude leg: model `<exact model id>`, effort `<effort>`.
+- Codex sandbox: danger-full-access (bubblewrap denied)   # optional, see below
 ```
 
 The skill reads this section, lets the user's explicit instruction for a run
 override it, and otherwise asks; without the section every chained gate stops
 at that question. Judgment work belongs on strong tiers, so a policy naming a
 fast/cheap tier makes every run it drives report itself as degraded.
+
+The optional `Codex sandbox:` line authorizes the review's cross-provider leg
+to run Codex under `--sandbox danger-full-access` on Linux hosts where
+bubblewrap cannot create user namespaces and a sandboxed run would read
+nothing while still answering (see the codex skill's
+`references/runtime-findings.md`). It is a per-project statement that the
+project's hosts are known to deny namespaces; the leg still puts a hard
+read-only constraint in the prompt, checks `git status --porcelain` before and
+after, and reports the sandbox as prompt-enforced. Without the line the leg
+must stay sandboxed and report INCOMPLETE on such a host.
 
 Keep evidence separate from policy: a list of required checks is not a test
 receipt. A measured risk weight from one project is not a generic default.
