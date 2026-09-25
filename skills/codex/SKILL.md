@@ -160,6 +160,24 @@ interpreters without `os.waitid` (CPython before 3.13 on macOS) also poll the
 leader through it. Native Windows/Git Bash is rejected because this helper
 requires POSIX process-group ownership.
 
+On a native Windows host the sanctioned substitute is the CLI itself, with the
+same explicit model, effort and sandbox the helper would have passed, a fresh
+`-o` result file, and the prompt on stdin, launched in the background with its
+own log:
+
+```bash
+PATH="/c/Users/<user>/AppData/Roaming/npm:$PATH" codex exec --model <m>   -c model_reasoning_effort=<effort> --sandbox read-only --skip-git-repo-check   -C /abs/repo -o /abs/unused-answer.md - < /abs/prompt.md > /abs/run.log 2>&1
+```
+
+It has no receipt, no watcher and no bounded deadline: read the `-o` file only
+after the process exits, treat a missing or empty file as a failed run, and
+record the substitution in whatever gate or report consumed it. Prefer the npm
+global `codex` over the desktop app's alpha binary on `PATH`. A write run
+(`--sandbox workspace-write`) must be told to keep caches out of the repository
+(`PRE_COMMIT_HOME`, virtualenvs, Playwright reports in `%TEMP%`): directories it
+creates inside a worktree are owned by the sandbox and can break the next
+native build there.
+
 Known limits of the preflight and polling: the capability probe matches
 literal flag names in `codex exec --help`, so a wrapper that pages or
 localizes help text, or an older CLI missing a probed flag, fails the run

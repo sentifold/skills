@@ -99,10 +99,17 @@ def untracked_digest(repo, name):
 
 
 def refuse_in_progress_operation(root):
+    def marker_exists(name):
+        return (root / git(root, "rev-parse", "--git-path", name).decode().strip()).exists()
+
     for name, operation in IN_PROGRESS_OPERATIONS:
-        marker = git(root, "rev-parse", "--git-path", name).decode().strip()
-        if (root / marker).exists():
-            raise ScopeError(f"A {operation} is in progress ({name} exists); finish or abort it before resolving a review scope")
+        if not marker_exists(name):
+            continue
+        # Git can leave REBASE_HEAD behind after a rebase completes; only the
+        # rebase-merge / rebase-apply directory proves one is still running.
+        if name == "REBASE_HEAD" and not (marker_exists("rebase-merge") or marker_exists("rebase-apply")):
+            continue
+        raise ScopeError(f"A {operation} is in progress ({name} exists); finish or abort it before resolving a review scope")
     if git(root, "ls-files", "--unmerged", "-z").strip(b"\0"):
         raise ScopeError("The index has unmerged entries; resolve the conflicts before resolving a review scope")
 

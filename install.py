@@ -122,7 +122,7 @@ class Plan:
 
 def load_catalog(root: Path) -> dict:
     try:
-        catalog = json.loads((root / "catalog.json").read_text())
+        catalog = json.loads((root / "catalog.json").read_text(encoding="utf-8"))
         if catalog["schema_version"] != 1:
             raise ValueError("unsupported schema_version")
         packages = catalog["packages"]
@@ -279,7 +279,7 @@ def conflict_message(dest: Path, name: str, current: State, legacy: bool) -> str
 def rendered_agent(root: Path, agent: dict) -> bytes:
     source = root / agent["source"]
     try:
-        template = source.read_text()
+        template = source.read_text(encoding="utf-8")
         if "{{SKILLS_ROOT}}" not in template:
             raise ValueError("missing {{SKILLS_ROOT}} reference")
         for reference in re.findall(r"\{\{SKILLS_ROOT\}\}/([a-zA-Z0-9_./-]+)", template):
@@ -591,7 +591,7 @@ def apply(plan: Plan) -> None:
 
 def codex_config_warnings(config: Path) -> list[str]:
     try:
-        settings = tomllib.loads(config.read_text())
+        settings = tomllib.loads(config.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return [f"Codex: {config} not found; nested agents need multi_agent = true under [features] and agents.max_depth = 2 for the review topology, or use the documented parent-coordination fallback"]
     except (OSError, ValueError) as exc:
