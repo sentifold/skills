@@ -1,0 +1,2 @@
+# Shell helpers are copied from Windows checkouts to POSIX hosts.
+*.sh text eol=lf
