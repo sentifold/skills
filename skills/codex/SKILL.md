@@ -58,9 +58,10 @@ noise lines.
   not that its version matches; it does not change the CLI's resource resolution.
 - `--cd` names the target repo without changing the caller directory.
 - Pass the prompt after `--`, or pipe it on stdin. Argument prompts close the
-  child's stdin; a pipe that never closes is bounded by the run deadline. An
-  empty prompt argument (`-- ""`) falls back to stdin when stdin is not a
-  terminal; on a terminal it is a usage error.
+  child's stdin on POSIX; Windows feeds them through stdin. A pipe that never
+  closes is bounded by the run deadline. An empty prompt argument (`-- ""`)
+  falls back to stdin when stdin is not a terminal; on a terminal it is a usage
+  error.
 - `--review` selects `codex exec review`. `--json` retains provider JSONL in the
   run's stdout file. The final message remains the result file in either mode.
 - `--fast` sets `service_tier=fast` and `features.fast_mode=true`.
@@ -96,15 +97,15 @@ evidence you must retain longer out of the run directory.
 
 The default overall deadline is 1800 seconds; `--timeout <seconds>` changes it.
 Version/help probes are limited to 10 seconds each (`--preflight-timeout`).
-TERM/INT and deadline expiry terminate the owned child process group, wait
-briefly, then kill remaining group members. A signal that arrives during that
+On POSIX, TERM/INT and deadline expiry terminate the owned child process group,
+wait briefly, then kill remaining group members. A signal that arrives during that
 cleanup is recorded in the receipt (`deferred_signals`) and does not replace
 the first cause. After the leader exits on its own, leftover descendants are
 still terminated and killed, but a member that cannot be verified or stopped
 is recorded as `cleanup_warning` and the child's exit code stands; `125` is
 reserved for timeout/cancel paths where live members remain. No detached
 watchdog is started; `--no-watchdog` is retained as a no-op. SIGKILL of the
-supervisor and descendants that deliberately create independent sessions
+POSIX supervisor and descendants that deliberately create independent sessions
 cannot be cleaned by a signal handler. Inspect the receipt/processes before
 retrying an interrupted write run.
 
@@ -128,8 +129,8 @@ marker-only logs must be inspected manually, never accepted as a gate.
 
 Helper exit codes: 0 success, 2 usage/preflight failure, 4 missing result,
 124 timeout, 125 incomplete process cleanup, 127 missing executable,
-130/143 cancellation, otherwise the child failure code; a child killed by a
-signal reports 128+signal. These codes are ambiguous on their own: a child that
+130/143 cancellation (149 for Windows Ctrl+Break), otherwise the child failure
+code; a child killed by a signal reports 128+signal. These codes are ambiguous on their own: a child that
 itself exits 2, 4, 124, 125 or 127 is passed through unchanged, and a preflight
 probe that dies by signal or exits 126+ is reported as 2. Always read the
 receipt's `status`, `diagnostic` and `child_exit_code` to distinguish causes.
@@ -157,23 +158,15 @@ are valid; writes to linked worktree Git metadata may need separate permissions.
 macOS, Linux and WSL with Python 3.10+ and a working `ps` (procps) are
 supported: the runtime lists the owned process group through `ps`, and
 interpreters without `os.waitid` (CPython before 3.13 on macOS) also poll the
-leader through it. Native Windows/Git Bash is rejected because this helper
-requires POSIX process-group ownership.
+leader through it. Native Windows (Git Bash + Python 3.10+) uses a kill-on-close
+Job Object: spawn suspended, assign before resume, then Ctrl+Break and bounded
+job termination on cancellation, timeout or leftover descendants. Job membership
+also covers orphaned descendants. Cleanup failure is terminal (`125`,
+`CLEANUP_FAILED`). `.cmd`/`.bat` arguments containing cmd metacharacters are
+rejected; Windows prompts travel on stdin. `python3` must resolve to a real
+interpreter, not the Microsoft Store alias.
 
-On a native Windows host the sanctioned substitute is the CLI itself, with the
-same explicit model, effort and sandbox the helper would have passed, a fresh
-`-o` result file, and the prompt on stdin, launched in the background with its
-own log:
-
-```bash
-PATH="/c/Users/<user>/AppData/Roaming/npm:$PATH" codex exec --model <m>   -c model_reasoning_effort=<effort> --sandbox read-only --skip-git-repo-check   -C /abs/repo -o /abs/unused-answer.md - < /abs/prompt.md > /abs/run.log 2>&1
-```
-
-It has no receipt, no watcher and no bounded deadline: read the `-o` file only
-after the process exits, treat a missing or empty file as a failed run, and
-record the substitution in whatever gate or report consumed it. Prefer the npm
-global `codex` over the desktop app's alpha binary on `PATH`. A write run
-(`--sandbox workspace-write`) must be told to keep caches out of the repository
+A write run (`--sandbox workspace-write`) must keep caches out of the repository
 (`PRE_COMMIT_HOME`, virtualenvs, Playwright reports in `%TEMP%`): directories it
 creates inside a worktree are owned by the sandbox and can break the next
 native build there.
@@ -181,10 +174,10 @@ native build there.
 Known limits of the preflight and polling: the capability probe matches
 literal flag names in `codex exec --help`, so a wrapper that pages or
 localizes help text, or an older CLI missing a probed flag, fails the run
-(deliberately, with no fallback). Interpreters without `os.waitid` fork `ps`
+(deliberately, with no fallback). POSIX interpreters without `os.waitid` fork `ps`
 on every poll tick (up to four times a second for the whole run); prefer
 CPython 3.13+ for long runs. The supervisor is single-threaded and installs
-signal handlers plus a `preexec_fn`; `Run` is not safe to drive from a
+signal handlers (plus a POSIX `preexec_fn`); `Run` is not safe to drive from a
 threaded harness.
 
 ## Callers of the earlier Bash helpers

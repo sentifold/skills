@@ -26,9 +26,9 @@ that project's `AGENTS.md` for checks and review/publication policy. There are n
 engine/build rules in this shared skill.
 
 The prompt follows `--` or arrives on stdin. An argument prompt closes the
-child's stdin; an empty prompt argument (`-- ""`) falls back to stdin when
-stdin is not a terminal and is a usage error otherwise. The helper runs print
-mode without a PTY or saved session; provider output is retained separately
+child's stdin on POSIX; Windows feeds it through stdin. An empty prompt argument
+(`-- ""`) falls back to stdin when stdin is not a terminal and is a usage
+error otherwise. The helper runs print mode without a PTY or saved session; provider output is retained separately
 from supervisor lifecycle records.
 Read [references/runtime.md](references/runtime.md) before using authorization,
 configuration, process or result assumptions in an automated gate.
@@ -83,8 +83,8 @@ supervisor's receipt does.
 
 Helper exit codes: 0 success; 2 usage/preflight; 3 missing login under the
 legacy auth check; 4 missing result; 124 timeout; 125 incomplete process
-cleanup; 127 missing executable; 130/143 cancellation; otherwise the child's
-failure code (128+signal for a signal death). These are ambiguous on their
+cleanup; 127 missing executable; 130/143 cancellation (149 for Windows
+Ctrl+Break); otherwise the child's failure code (128+signal for a signal death). These are ambiguous on their
 own: a child exiting 2, 3, 4, 124, 125 or 127 is passed through unchanged,
 and a preflight probe that dies by signal or exits 126+ is reported as 2.
 Read the receipt's `status`, `diagnostic` and `child_exit_code` to tell them
@@ -116,4 +116,5 @@ pair under the same names. Every break a migrating caller must handle:
 - New: stdin prompts, `--cli`, `--timeout`, `--preflight-timeout`, `--keep`,
   `--no-search` (drops WebSearch/WebFetch), a 7-day retention sweep of finished
   run directories.
-- `ps` is required; native Windows/Git Bash is rejected.
+- POSIX requires `ps`; native Windows/Git Bash uses Job Objects. See the runtime
+  reference for `.cmd` argument restrictions and the `python3` Store-alias trap.

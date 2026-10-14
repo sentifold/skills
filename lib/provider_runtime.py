@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded POSIX lifecycle for the portable Codex and Claude shell helpers.
+"""Bounded process lifecycle for provider helpers (POSIX process groups; Windows job objects).
 
 Copyright (c) 2026 Theta Games. Derived from gamejam f4dbd06ec.
 Internal use only; see LICENSE.txt at the repository root.
@@ -83,6 +83,8 @@ def atomic_json(path, data):
 
 
 def alive(pid):
+    if os.name == "nt":
+        return _windows_alive(pid)
     try:
         os.kill(pid, 0)
         return True
@@ -96,7 +98,7 @@ def alive(pid):
 # leader's state from ps, and that fork is why their polling backs off.
 LEADER_WAITID = getattr(os, "waitid", None)
 EXIT_POLL_START = .03
-EXIT_POLL_LIMIT = .03 if LEADER_WAITID else .25
+EXIT_POLL_LIMIT = .03 if os.name == "nt" or LEADER_WAITID else .25
 
 
 def leader_state(pid):
@@ -133,45 +135,33 @@ def collect_finished_run_dirs(provider, own_root):
     return removed
 
 
-class Run:
-    def __init__(self, provider, args):
-        self.provider, self.args = provider, args
-        self.run_id = uuid.uuid4().hex
-        self.root = self.receipt = self.result = None
-        self.child = None
-        self.deadline = time.monotonic() + args.timeout
-        self.export = Path(args.out).absolute() if args.out else None
-        self.reservation = None
-        self.schema = None
-        self.prompt_text = None
-        self.shield = False
-        self.data = dict(schema=1, provider=provider, run_id=self.run_id, pid=os.getpid(),
-                         status="STARTING", started_at=time.time(), deadline_at=time.time() + args.timeout,
-                         keep=bool(args.keep))
-        self.env = os.environ.copy()
-        keys = ("OPENAI_API_KEY", "CODEX_API_KEY") if provider == "codex" else (
-            "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
-            "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK",
-            "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY")
-        if provider == "codex" or args.auth != "inherit":
-            for key in keys:
-                self.env.pop(key, None)
+class _PosixOwnership:
+    strict_cleanup = False
 
-    def save(self, **fields):
-        self.data.update(fields)
-        self.data["deadline_remaining"] = round(max(0.0, self.deadline - time.monotonic()), 3)
-        atomic_json(self.receipt, self.data)
+    def __init__(self, data):
+        self.data = data
 
-    def marker(self, kind, **fields):
-        # Only this supervisor writes lifecycle stdout. Provider text stays in files.
-        print(f"{self.provider.upper()}_RUN_{kind} " + json.dumps(
-            dict(run_id=self.run_id, **fields), separators=(",", ":")), flush=True)
+    def spawn(self, run, argv, **kwargs):
+        blocked = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT, signal.SIGTERM})
+        def child_signals():
+            # The single-threaded supervisor restores the inherited mask before exec.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
+            signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+        try:
+            run.child = subprocess.Popen(argv, **kwargs, start_new_session=True, preexec_fn=child_signals)
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
 
-    def on_signal(self, signum, _frame):
-        if self.shield:
-            self.data.setdefault("deferred_signals", []).append(signum)
-            return
-        raise Cancelled(signum)
+    def force_stop(self, process):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
 
     @staticmethod
     def child_exited(process):
@@ -236,6 +226,256 @@ class Run:
         except subprocess.TimeoutExpired as exc:
             raise RunError(f"Owned child {process.pid} did not stop after KILL", 125, "CLEANUP_FAILED") from exc
 
+
+if os.name == "nt":
+    import ctypes
+    from ctypes import wintypes
+
+    class _BasicLimit(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64),
+                    ("PerJobUserTimeLimit", ctypes.c_int64), ("LimitFlags", wintypes.DWORD),
+                    ("MinimumWorkingSetSize", ctypes.c_size_t), ("MaximumWorkingSetSize", ctypes.c_size_t),
+                    ("ActiveProcessLimit", wintypes.DWORD), ("Affinity", ctypes.c_size_t),
+                    ("PriorityClass", wintypes.DWORD), ("SchedulingClass", wintypes.DWORD)]
+
+    class _IoCounters(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_uint64) for name in (
+            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+            "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+    class _ExtendedLimit(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", _BasicLimit), ("IoInfo", _IoCounters),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    class _Accounting(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_int64) for name in (
+            "TotalUserTime", "TotalKernelTime", "ThisPeriodTotalUserTime", "ThisPeriodTotalKernelTime")
+        ] + [(name, wintypes.DWORD) for name in (
+            "TotalPageFaultCount", "TotalProcesses", "ActiveProcesses", "TotalTerminatedProcesses")]
+
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _ntdll = ctypes.WinDLL("ntdll")
+    # Explicit signatures are required: default ctypes ints truncate 64-bit handles.
+    for name, result, args in (
+        ("CreateJobObjectW", wintypes.HANDLE, [ctypes.c_void_p, wintypes.LPCWSTR]),
+        ("SetInformationJobObject", wintypes.BOOL,
+         [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]),
+        ("AssignProcessToJobObject", wintypes.BOOL, [wintypes.HANDLE, wintypes.HANDLE]),
+        ("QueryInformationJobObject", wintypes.BOOL,
+         [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]),
+        ("TerminateJobObject", wintypes.BOOL, [wintypes.HANDLE, wintypes.UINT]),
+        ("GenerateConsoleCtrlEvent", wintypes.BOOL, [wintypes.DWORD, wintypes.DWORD]),
+        ("OpenProcess", wintypes.HANDLE, [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]),
+        ("GetExitCodeProcess", wintypes.BOOL, [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]),
+        ("CloseHandle", wintypes.BOOL, [wintypes.HANDLE]),
+    ):
+        function = getattr(_kernel32, name)
+        function.restype, function.argtypes = result, args
+    _ntdll.NtResumeProcess.restype = ctypes.c_long
+    _ntdll.NtResumeProcess.argtypes = [wintypes.HANDLE]
+
+
+def _windows_alive(pid):
+    if pid <= 0:
+        return False
+    handle = _kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        error = ctypes.get_last_error()
+        if error == 5:  # ERROR_ACCESS_DENIED
+            return True
+        if error in (87, 1168):  # ERROR_INVALID_PARAMETER / ERROR_NOT_FOUND
+            return False
+        raise ctypes.WinError(error)
+    try:
+        code = wintypes.DWORD()
+        if not _kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return code.value == 259  # STILL_ACTIVE
+    finally:
+        _kernel32.CloseHandle(handle)
+
+
+class _WindowsJobOwnership:
+    strict_cleanup = True
+
+    def __init__(self, data):
+        self.data = data
+        self.job = None
+
+    @staticmethod
+    def child_exited(process):
+        return process.poll() is not None
+
+    @staticmethod
+    def command_line(argv):
+        if Path(argv[0]).suffix.lower() not in (".cmd", ".bat"):
+            return argv
+        for index, argument in enumerate(argv):
+            if any(char in argument for char in '"%^&|<>!\r\n'):
+                raise RunError(f"Unsafe .cmd/.bat argument at index {index}; cmd metacharacters are forbidden. "
+                               "Use a native executable for options requiring these characters.")
+        # Quote every token, including Claude's parenthesized tool rules. /d disables
+        # AutoRun; /s gives the outer command quotes deterministic stripping semantics.
+        # There are no embedded quotes; double trailing slashes for the CLI's CRT parser.
+        quoted = ['"' + arg + '\\' * (len(arg) - len(arg.rstrip('\\'))) + '"' for arg in argv]
+        cmd = str(Path(os.environ["SystemRoot"]) / "System32" / "cmd.exe")
+        return subprocess.list2cmdline([cmd]) + ' /d /s /c "' + ' '.join(quoted) + '"'
+
+    def close(self):
+        if self.job is not None:
+            _kernel32.CloseHandle(self.job)
+            self.job = None
+
+    def spawn(self, run, argv, **kwargs):
+        command = self.command_line(argv)
+        # Windows has no pthread_sigmask. Defer handlers until ownership is recorded.
+        run.shield = True
+        process = None
+        try:
+            process = subprocess.Popen(command, **kwargs,
+                                       creationflags=0x00000004 | subprocess.CREATE_NEW_PROCESS_GROUP)  # CREATE_SUSPENDED
+            self.job = _kernel32.CreateJobObjectW(None, None)
+            if not self.job:
+                self.job = None
+                raise ctypes.WinError(ctypes.get_last_error())
+            limits = _ExtendedLimit()
+            limits.BasicLimitInformation.LimitFlags = 0x00002000  # KILL_ON_JOB_CLOSE
+            if not _kernel32.SetInformationJobObject(self.job, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            if not _kernel32.AssignProcessToJobObject(self.job, int(process._handle)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            status = _ntdll.NtResumeProcess(int(process._handle))
+            if status < 0:
+                raise RunError(f"NtResumeProcess failed (NTSTATUS {status & 0xffffffff:#x})")
+            run.child = process
+        except BaseException as exc:
+            # No user code can run before assignment. Kill even an unassigned suspended
+            # child; closing the job is a second safety net if assignment succeeded.
+            try:
+                if process is not None:
+                    process.kill()
+            except OSError:
+                # Closing an assigned job can still stop the process if the direct
+                # termination failed. Verify below before reporting the launch error.
+                pass
+            finally:
+                self.close()
+            if process is not None:
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired as cleanup_error:
+                    self.data["cleanup_live_pids"] = [process.pid]
+                    raise RunError(f"Could not stop suspended child {process.pid} after launch failure",
+                                   125, "CLEANUP_FAILED") from cleanup_error
+            raise RunError(f"Could not establish Windows job ownership: {exc}") from exc
+        finally:
+            run.shield = False
+        deferred = self.data.get("deferred_signals")
+        if deferred:
+            raise Cancelled(deferred[0])
+
+    def active_processes(self):
+        accounting = _Accounting()
+        if not _kernel32.QueryInformationJobObject(
+                self.job, 1, ctypes.byref(accounting), ctypes.sizeof(accounting), None):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return accounting.ActiveProcesses
+
+    def live_pids(self):
+        capacity = max(16, self.active_processes())
+        while True:
+            class _PidList(ctypes.Structure):
+                _fields_ = [("NumberOfAssignedProcesses", wintypes.DWORD),
+                            ("NumberOfProcessIdsInList", wintypes.DWORD),
+                            ("ProcessIdList", ctypes.c_size_t * capacity)]
+            pids = _PidList()
+            if _kernel32.QueryInformationJobObject(self.job, 3, ctypes.byref(pids), ctypes.sizeof(pids), None):
+                return list(pids.ProcessIdList[:pids.NumberOfProcessIdsInList])
+            error = ctypes.get_last_error()
+            if error != 234:  # ERROR_MORE_DATA: membership grew during the query
+                raise ctypes.WinError(error)
+            capacity = max(capacity * 2, pids.NumberOfAssignedProcesses)
+
+    def wait_empty(self):
+        until = time.monotonic() + 1
+        while self.active_processes():
+            if time.monotonic() >= until:
+                return False
+            time.sleep(.02)
+        return True
+
+    def stop_group(self, process):
+        if self.job is None:
+            return
+        try:
+            # Popen retains the process handle through cleanup. The job handle, not
+            # console attachment, is authoritative for descendant termination.
+            _kernel32.GenerateConsoleCtrlEvent(1, process.pid)  # CTRL_BREAK_EVENT; best effort
+            if not self.wait_empty():
+                _kernel32.TerminateJobObject(self.job, 1)
+                if not self.wait_empty():
+                    live = self.live_pids()
+                    self.data["cleanup_live_pids"] = live
+                    raise RunError(f"Owned job still has live members after termination: {live}",
+                                   125, "CLEANUP_FAILED")
+            process.wait(timeout=2)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise RunError(f"Cannot verify owned job cleanup: {exc}", 125, "CLEANUP_FAILED") from exc
+        finally:
+            self.close()
+
+
+_Ownership = _WindowsJobOwnership if os.name == "nt" else _PosixOwnership
+SUPERVISOR_SIGNALS = (signal.SIGINT, signal.SIGTERM) + ((signal.SIGBREAK,) if os.name == "nt" else ())
+
+
+class Run:
+    def __init__(self, provider, args):
+        self.provider, self.args = provider, args
+        self.run_id = uuid.uuid4().hex
+        self.root = self.receipt = self.result = None
+        self.child = None
+        self.deadline = time.monotonic() + args.timeout
+        self.export = Path(args.out).absolute() if args.out else None
+        self.reservation = None
+        self.schema = None
+        self.prompt_text = None
+        self.shield = False
+        self.data = dict(schema=1, provider=provider, run_id=self.run_id, pid=os.getpid(),
+                         status="STARTING", started_at=time.time(), deadline_at=time.time() + args.timeout,
+                         keep=bool(args.keep))
+        self.ownership = _Ownership(self.data)
+        self.env = os.environ.copy()
+        keys = ("OPENAI_API_KEY", "CODEX_API_KEY") if provider == "codex" else (
+            "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY")
+        if provider == "codex" or args.auth != "inherit":
+            for key in keys:
+                self.env.pop(key, None)
+
+    def save(self, **fields):
+        self.data.update(fields)
+        self.data["deadline_remaining"] = round(max(0.0, self.deadline - time.monotonic()), 3)
+        atomic_json(self.receipt, self.data)
+
+    def marker(self, kind, **fields):
+        # Only this supervisor writes lifecycle stdout. Provider text stays in files.
+        print(f"{self.provider.upper()}_RUN_{kind} " + json.dumps(
+            dict(run_id=self.run_id, **fields), separators=(",", ":")), flush=True)
+
+    def on_signal(self, signum, _frame):
+        if self.shield:
+            self.data.setdefault("deferred_signals", []).append(signum)
+            return
+        raise Cancelled(signum)
+
+    child_exited = staticmethod(_Ownership.child_exited)
+
+    def stop_group(self, process):
+        self.ownership.stop_group(process)
+
     def cleanup(self, strict=True):
         if self.child is None:
             return
@@ -244,17 +484,10 @@ class Run:
         try:
             self.stop_group(process)
         except RunError as exc:
-            if strict:
+            if strict or self.ownership.strict_cleanup:
                 raise
             self.data["cleanup_warning"] = str(exc)
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except OSError:
-                pass
-            try:
-                process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                pass
+            self.ownership.force_stop(process)
         finally:
             self.shield = False
         self.child = None
@@ -262,21 +495,8 @@ class Run:
     def execute(self, argv, label, *, stdin=None, cwd=None, limit=None):
         out, err = self.root / f"{label}.stdout", self.root / f"{label}.stderr"
         with out.open("wb") as stdout, err.open("wb") as stderr:
-            # Record ownership before a pending TERM/INT can be delivered. Otherwise
-            # a signal between fork and assignment could leave an unrecorded child.
-            blocked = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT, signal.SIGTERM})
-            def child_signals():
-                # This supervisor is single-threaded. Restore the inherited mask
-                # before exec so the child can receive graceful termination.
-                signal.signal(signal.SIGINT, signal.SIG_DFL)
-                signal.signal(signal.SIGTERM, signal.SIG_DFL)
-                signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
-            try:
-                self.child = subprocess.Popen(argv, stdin=stdin if stdin is not None else subprocess.DEVNULL,
-                                              stdout=stdout, stderr=stderr, cwd=cwd,
-                                              env=self.env, start_new_session=True, preexec_fn=child_signals)
-            finally:
-                signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+            self.ownership.spawn(self, argv, stdin=stdin if stdin is not None else subprocess.DEVNULL,
+                                 stdout=stdout, stderr=stderr, cwd=cwd, env=self.env)
             self.save(child_pid=self.child.pid, phase=label,
                       stdout=str(out), stderr=str(err))
             process = self.child
@@ -374,7 +594,7 @@ class Run:
             # Explicitly overrides inherited workspace-write network/search config.
             argv += ["-c", f"sandbox_workspace_write.network_access={str(a.network).lower()}"]
             if not a.search:
-                argv += ["-c", 'web_search="disabled"']
+                argv += ["-c", "web_search='disabled'" if os.name == "nt" else 'web_search="disabled"']
             if not a.browser_mcp:
                 argv += ["-c", "mcp_servers.node_repl.enabled=false"]
             if a.json:
@@ -395,12 +615,18 @@ class Run:
             tools += ["Agent"]
             allowed += ["Agent"]
         allowed += [f"Bash({pattern})" for pattern in a.allow_bash]
+        mcp_config = '{"mcpServers":{}}'
+        if os.name == "nt":
+            # Claude accepts a file here; inline JSON is unsafe through npm .cmd shims.
+            config_path = self.root / "mcp-config.json"
+            config_path.write_text(mcp_config, encoding="utf-8")
+            mcp_config = str(config_path)
         argv = [cli, "-p", "--output-format", "json", "--no-session-persistence",
                 "--max-turns", str(a.max_turns), "--permission-mode",
                 "dontAsk" if a.mode == "read-only" else "acceptEdits",
                 "--allowedTools", *allowed, "--tools", ",".join(tools),
                 "--disable-slash-commands", "--no-chrome", "--strict-mcp-config",
-                "--mcp-config", '{"mcpServers":{}}', "--model", a.model]
+                "--mcp-config", mcp_config, "--model", a.model]
         if a.effort:
             argv += ["--effort", a.effort]
         if a.agent:
@@ -488,14 +714,27 @@ class Run:
                 raise RunError("Claude reports no login; use its supported login flow", 3)
         argv, cwd = self.command(cli)
         stdin = None
+        prompt_file = None
         if self.prompt_text is not None:
-            argv.append(self.prompt_text)
+            if os.name == "nt":
+                # Both CLIs accept stdin prompts. A file avoids blocking on a full pipe
+                # before execute() can enforce the deadline, even for a huge prompt.
+                prompt_file = self.root / "prompt.txt"
+                prompt_file.write_bytes(self.prompt_text.encode("utf-8"))
+                if self.provider == "codex":
+                    argv.append("-")
+            else:
+                argv.append(self.prompt_text)
         else:
             stdin = sys.stdin
             if self.provider == "codex":
                 argv.append("-")
         self.save(status="RUNNING")
-        rc, stdout, stderr = self.execute(argv, "provider", stdin=stdin, cwd=cwd)
+        if prompt_file:
+            with prompt_file.open("rb") as source:
+                rc, stdout, stderr = self.execute(argv, "provider", stdin=source, cwd=cwd)
+        else:
+            rc, stdout, stderr = self.execute(argv, "provider", stdin=stdin, cwd=cwd)
         self.save(child_exit_code=rc)
         if rc:
             raise RunError(f"Selected {self.provider} failed (rc={rc}); inspect {stderr} and {stdout}. "
@@ -530,7 +769,7 @@ class Run:
             print(exc, file=sys.stderr)
             return exc.code if isinstance(exc, RunError) else 2
         self.marker("START", pid=os.getpid(), receipt=str(self.receipt))
-        old_handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+        old_handlers = {sig: signal.getsignal(sig) for sig in SUPERVISOR_SIGNALS}
         for sig in old_handlers:
             signal.signal(sig, self.on_signal)
         rc, status = 0, "DONE"
@@ -637,8 +876,8 @@ def main():
         return watch(provider, argv)
     p = parser(provider)
     args = p.parse_args(argv)
-    if os.name != "posix":
-        p.error("requires POSIX process groups; use macOS, Linux, or WSL (not native Git Bash)")
+    if os.name not in ("posix", "nt"):
+        p.error("requires POSIX process groups or Windows job objects")
     if not args.model.strip():
         p.error("--model must not be empty")
     if provider == "codex" and args.fast and args.no_fast:
