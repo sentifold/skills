@@ -7,7 +7,8 @@ import importlib.util
 import io
 import os
 from pathlib import Path
-import pty
+if os.name == 'posix':
+    import pty
 import shutil
 import signal
 import subprocess
@@ -90,7 +91,6 @@ else:
 '''
 
 
-@unittest.skipUnless(os.name == 'posix', 'requires POSIX process groups')
 class CrossProviderHelpersTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='provider tests ')
@@ -104,11 +104,22 @@ class CrossProviderHelpersTests(unittest.TestCase):
         self.links = self.root / 'global skills'
         self.links.mkdir()
         for provider in ('codex', 'claude'):
-            (self.links / provider).symlink_to(ROOT / 'skills' / provider, target_is_directory=True)
-            path = self.bin / provider
-            path.write_text(f'#!{sys.executable}\n' + FAKE)
-            path.chmod(0o755)
-        (self.bin / 'python3').symlink_to(sys.executable)
+            if os.name == 'nt':
+                import _winapi
+                _winapi.CreateJunction(str(ROOT / 'skills' / provider), str(self.links / provider))
+                (self.bin / f'{provider}.py').write_text(FAKE)
+                (self.bin / f'{provider}.cmd').write_text(
+                    f'@"{sys.executable}" "%~dp0{provider}.py" %*\n')
+            else:
+                (self.links / provider).symlink_to(ROOT / 'skills' / provider, target_is_directory=True)
+                path = self.bin / provider
+                path.write_text(f'#!{sys.executable}\n' + FAKE)
+                path.chmod(0o755)
+        if os.name == 'nt':
+            (self.bin / 'python3').write_text(
+                '#!/bin/sh\nexec "' + Path(sys.executable).as_posix() + '" "$@"\n')
+        else:
+            (self.bin / 'python3').symlink_to(sys.executable)
         self.record = self.root / 'calls.jsonl'
         self.config = self.root / 'config.toml'
         self.config.write_text('service_tier = "fast"\nweb_search = "live"\n[features]\nfast_mode = false\n')
@@ -121,11 +132,14 @@ class CrossProviderHelpersTests(unittest.TestCase):
                     'OPENAI_API_KEY': 'test-only', 'CODEX_API_KEY': 'test-only',
                     'ANTHROPIC_API_KEY': 'test-only', 'ANTHROPIC_AUTH_TOKEN': 'test-only',
                     'ANTHROPIC_BASE_URL': 'test-only'}
+        if os.name == 'nt':
+            self.env['PATH'] += os.pathsep + str(Path(shutil.which('bash')).parent)
+            self.env.update(TEMP=str(self.root), TMP=str(self.root))
         self.env.pop('CODEX_BIN', None)
         self.env.pop('CLAUDE_BIN', None)
 
     def command(self, provider, *options, model='explicit-model', prompt=True):
-        return ['bash', str(self.links / provider / 'scripts' / f'{provider}-ephemeral.sh'),
+        return [shutil.which('bash'), str(self.links / provider / 'scripts' / f'{provider}-ephemeral.sh'),
                 *(['--model', model] if model else []), *options,
                 *(['--', 'task with spaces and $literal'] if prompt else [])]
 
@@ -144,8 +158,8 @@ class CrossProviderHelpersTests(unittest.TestCase):
         return json.loads(Path(self.receipt(result)['output']).read_text())
 
     def watch(self, provider, path, *args):
-        return subprocess.run(['bash', str(self.links / provider / 'scripts' / f'{provider}-watch.sh'),
-                               str(path), *args], capture_output=True, text=True, timeout=5)
+        return subprocess.run([shutil.which('bash'), str(self.links / provider / 'scripts' / f'{provider}-watch.sh'),
+                               str(path), *args], env=self.env, capture_output=True, text=True, timeout=5)
 
     def test_model_effort_cwd_symlinks_and_key_environment(self):
         for provider in ('codex', 'claude'):
@@ -160,8 +174,12 @@ class CrossProviderHelpersTests(unittest.TestCase):
                         args = payload['argv']
                         self.assertEqual(args[args.index('--model') + 1], 'explicit-model')
                         self.assertEqual(payload['cwd'], str(target if provider == 'claude' and target else self.caller))
-                        self.assertEqual(payload['stdin'], '')
-                        self.assertEqual(args[-1], 'task with spaces and $literal')
+                        if os.name == 'nt':
+                            self.assertEqual(payload['stdin'], 'task with spaces and $literal')
+                            self.assertNotIn('task with spaces and $literal', args)
+                        else:
+                            self.assertEqual(payload['stdin'], '')
+                            self.assertEqual(args[-1], 'task with spaces and $literal')
                         self.assertEqual(payload['codex_home'], str(self.root))
                         if provider == 'codex':
                             self.assertIn('--ephemeral', args)
@@ -213,7 +231,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
             payload = self.payload(self.run_helper(provider, *flags, '--no-search', stdin='stdin prompt\n'))
             self.assertEqual(payload['stdin'], 'stdin prompt\n')
             if provider == 'codex':
-                self.assertIn('web_search="disabled"', payload['argv'])
+                self.assertIn("web_search='disabled'" if os.name == 'nt' else 'web_search="disabled"', payload['argv'])
                 self.assertNotIn('--search', payload['argv'])
                 self.assertEqual(payload['argv'].count('service_tier=default'), 1)
             else:
@@ -226,7 +244,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
 
     def test_selected_cli_never_skips_broken_wrapper_and_reports_capabilities(self):
         for provider in ('codex', 'claude'):
-            selected = self.bin / provider
+            selected = self.bin / (f'{provider}.cmd' if os.name == 'nt' else provider)
             for mode, code in (('broken-version', 19), ('old-version', 2)):
                 result = self.run_helper(provider, '--cli', str(selected), mode=mode)
                 self.assertEqual(result.returncode, code)
@@ -282,11 +300,16 @@ class CrossProviderHelpersTests(unittest.TestCase):
         until = time.monotonic() + 5
         while time.monotonic() < until:
             if path.exists():
-                return int(path.read_text())
+                value = path.read_text()
+                if value:
+                    return int(value)
             time.sleep(.03)
         self.fail(f'fixture did not start: {path}')
 
     def assert_stopped(self, pid):
+        if os.name == 'nt':
+            self.assertFalse(RUNTIME.alive(pid), f'process {pid} remains running')
+            return
         result = subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)], capture_output=True, text=True)
         self.assertTrue(not result.stdout.strip() or result.stdout.strip().startswith('Z'),
                         f'process {pid} remains running: {result.stdout}')
@@ -295,7 +318,9 @@ class CrossProviderHelpersTests(unittest.TestCase):
         for provider in ('codex', 'claude'):
             descendant = Path(self.env['FAKE_DESCENDANT'])
             descendant.unlink(missing_ok=True)
-            result = self.run_helper(provider, '--timeout', '0.6', mode='orphan')
+            # Native Windows must start two .cmd/Python probes before the orphan fixture.
+            timeout = '4' if os.name == 'nt' else '0.6'
+            result = self.run_helper(provider, '--timeout', timeout, mode='orphan')
             self.assertEqual(result.returncode, 124, result.stderr)
             self.assertEqual(self.receipt(result)['status'], 'TIMEOUT')
             self.assert_stopped(self.wait_path(descendant))
@@ -303,6 +328,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
             self.assertEqual(probe.returncode, 124)
             self.assertEqual(self.receipt(probe)['phase'], 'version')
 
+    @unittest.skipUnless(os.name == 'posix', 'requires POSIX signals, ps or pty')
     def test_term_int_terminate_owned_process_group_and_watch_running_is_not_success(self):
         for provider in ('codex', 'claude'):
             for sig in (signal.SIGTERM, signal.SIGINT):
@@ -382,6 +408,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
             code = run.run()
         return code, stdout.getvalue()
 
+    @unittest.skipUnless(os.name == 'posix', 'requires POSIX signals, ps or pty')
     def test_leader_exit_is_detected_without_waitid_and_leaves_it_unreaped(self):
         # macOS interpreters before 3.13 have no os.waitid; the ps path must agree.
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)
@@ -400,6 +427,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
             child.kill()
             child.wait(timeout=3)
 
+    @unittest.skipUnless(os.name == 'posix', 'requires POSIX signals, ps or pty')
     def test_darwin_zombie_only_group_eperm_is_verified_before_reaping(self):
         run = self.lifecycle_fixture()
         child = subprocess.Popen([sys.executable, '-c', 'pass'], start_new_session=True)
@@ -417,6 +445,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
         finally:
             child.wait(timeout=3)
 
+    @unittest.skipUnless(os.name == 'posix', 'requires POSIX signals, ps or pty')
     def test_live_group_permission_failure_is_terminal_not_silently_successful(self):
         run = self.lifecycle_fixture()
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)
@@ -455,6 +484,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
                     self.assertNotIn('cleanup_warning', receipt)
                     self.assert_stopped(self.wait_path(descendant))
 
+    @unittest.skipUnless(os.name == 'posix', 'requires POSIX signals, ps or pty')
     def test_unverifiable_cleanup_after_successful_exit_is_a_warning(self):
         real_ps = shutil.which('ps', path=os.defpath)
         fake_ps = self.bin / 'ps'
@@ -504,6 +534,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
         for path in (recent_done, old_running, old_kept, other_provider, foreign, Path(receipt['receipt']).parent):
             self.assertTrue(path.exists(), path)
 
+    @unittest.skipUnless(os.name == 'posix', 'requires POSIX signals, ps or pty')
     def test_empty_prompt_argument_falls_back_to_stdin_unless_stdin_is_a_terminal(self):
         for provider in ('codex', 'claude'):
             with self.subTest(provider=provider):
@@ -536,6 +567,186 @@ class CrossProviderHelpersTests(unittest.TestCase):
         self.assertEqual(set(self.root.iterdir()), before | {taken})
         self.assertEqual(taken.read_text(), 'taken')
 
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows')
+    def test_windows_watch_never_kills_a_live_process_and_reports_died(self):
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+        try:
+            with mock.patch.object(RUNTIME.os, 'kill', side_effect=AssertionError('unsafe Windows liveness probe')):
+                self.assertTrue(RUNTIME.alive(child.pid))
+            self.assertIsNone(child.poll())
+            for provider in ('codex', 'claude'):
+                result = self.run_helper(provider)
+                receipt = self.receipt(result)
+                self.assertEqual(receipt['status'], 'DONE')
+                self.assertEqual(self.watch(provider, receipt['receipt']).returncode, 0)
+                receipt.update(status='RUNNING', exit_code=None, pid=child.pid, started_at=time.time())
+                Path(receipt['receipt']).write_text(json.dumps(receipt))
+                watching = self.watch(provider, receipt['receipt'])
+                self.assertEqual(watching.returncode, 10, watching.stdout)
+                self.assertTrue(watching.stdout.startswith('RUNNING '), watching.stdout)
+                self.assertIsNone(child.poll())
+            child.terminate()
+            child.wait(timeout=3)
+            self.assertFalse(RUNTIME.alive(child.pid))
+            died = self.watch('claude', receipt['receipt'])
+            self.assertEqual(died.returncode, 1)
+            self.assertTrue(died.stdout.startswith('DIED '), died.stdout)
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=3)
+
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows')
+    def test_windows_alive_handles_access_errors_and_closes_query_handles(self):
+        for error, expected in ((5, True), (87, False), (1168, False)):
+            with self.subTest(error=error), \
+                 mock.patch.object(RUNTIME._kernel32, 'OpenProcess', return_value=0), \
+                 mock.patch.object(RUNTIME.ctypes, 'get_last_error', return_value=error):
+                self.assertEqual(RUNTIME.alive(123), expected)
+        with mock.patch.object(RUNTIME._kernel32, 'OpenProcess', return_value=123), \
+             mock.patch.object(RUNTIME._kernel32, 'GetExitCodeProcess', return_value=0), \
+             mock.patch.object(RUNTIME._kernel32, 'CloseHandle') as close:
+            with self.assertRaises(OSError):
+                RUNTIME.alive(123)
+            close.assert_called_once_with(123)
+
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows')
+    def test_windows_cmd_argument_guard_and_stdin_prompt(self):
+        for suffix in ('.cmd', '.BAT'):
+            for character in '"%^&|<>!\r\n':
+                with self.subTest(suffix=suffix, character=repr(character)):
+                    with self.assertRaises(RUNTIME.RunError) as caught:
+                        RUNTIME._WindowsJobOwnership.command_line(['cli' + suffix, 'SECRET' + character])
+                    self.assertIn('index 1', str(caught.exception))
+                    self.assertNotIn('SECRET', str(caught.exception))
+        for provider in ('codex', 'claude'):
+            result = self.run_helper(provider, model='secret-model&echo')
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(self.receipt(result)['status'], 'FAILED')
+            self.assertIn('argument at index', result.stderr)
+            self.assertNotIn('secret-model', result.stderr)
+            calls = [json.loads(line)['argv'] for line in self.record.read_text().splitlines()]
+            self.assertTrue(all('--version' in args or '--help' in args for args in calls))
+            self.record.unlink()
+            prompt = 'quotes " and %PATH% ^ & | < > !\r\nnext line'
+            command = self.command(provider, prompt=False) + ['--', prompt]
+            result = subprocess.run(command, input='', cwd=self.caller, env=self.env,
+                                    capture_output=True, text=True, timeout=12)
+            self.assertEqual(self.payload(result)['stdin'], prompt.replace('\r\n', '\n'))
+            self.record.unlink()
+
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows')
+    def test_windows_empty_prompt_falls_back_to_stdin(self):
+        for provider in ('codex', 'claude'):
+            result = subprocess.run(self.command(provider, prompt=False) + ['--', ''],
+                                    input='piped prompt\n', cwd=self.caller, env=self.env,
+                                    capture_output=True, text=True, timeout=12)
+            self.assertEqual(self.payload(result)['stdin'], 'piped prompt\n')
+
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows')
+    def test_windows_hung_cli_is_dead_after_timeout(self):
+        for provider in ('codex', 'claude'):
+            started = Path(self.env['FAKE_STARTED'])
+            started.unlink(missing_ok=True)
+            result = self.run_helper(provider, '--timeout', '2', mode='hang')
+            self.assertEqual(result.returncode, 124, result.stderr)
+            self.assertEqual(self.receipt(result)['status'], 'TIMEOUT')
+            self.assert_stopped(self.wait_path(started))
+
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows')
+    def test_windows_spawn_failures_kill_suspended_child(self):
+        real_popen = subprocess.Popen
+        for dll, function, failure in (
+                (RUNTIME._kernel32, 'CreateJobObjectW', 0),
+                (RUNTIME._kernel32, 'SetInformationJobObject', 0),
+                (RUNTIME._kernel32, 'AssignProcessToJobObject', 0),
+                (RUNTIME._ntdll, 'NtResumeProcess', -1)):
+            with self.subTest(function=function):
+                run = self.lifecycle_fixture()
+                started = self.root / 'must-not-run'
+                children = []
+                def spawn(*args, **kwargs):
+                    child = real_popen(*args, **kwargs)
+                    children.append(child)
+                    return child
+                with mock.patch.object(RUNTIME.subprocess, 'Popen', side_effect=spawn), \
+                     mock.patch.object(dll, function, return_value=failure):
+                    with self.assertRaises(RUNTIME.RunError):
+                        run.ownership.spawn(run, [sys.executable, '-c',
+                            f'from pathlib import Path; Path({str(started)!r}).touch()'])
+                self.assertEqual(len(children), 1)
+                self.assertIsNotNone(children[0].poll())
+                self.assertFalse(started.exists())
+                self.assertIsNone(run.ownership.job)
+                self.assertIsNone(run.child)
+
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows')
+    def test_windows_job_close_kills_orphan_even_without_cleanup(self):
+        run = self.lifecycle_fixture()
+        descendant = self.root / 'job-descendant'
+        code = ('import pathlib,subprocess,sys; '
+                'p=subprocess.Popen([sys.executable,"-c","import time; time.sleep(60)"]); '
+                f'pathlib.Path({str(descendant)!r}).write_text(str(p.pid))')
+        try:
+            run.ownership.spawn(run, [sys.executable, '-c', code])
+            pid = self.wait_path(descendant)
+            run.child.wait(timeout=3)
+            self.assertTrue(RUNTIME.alive(pid))
+            self.assertEqual(run.ownership.active_processes(), 1)
+            self.assertEqual(run.ownership.live_pids(), [pid])
+            run.ownership.close()
+            until = time.monotonic() + 3
+            while RUNTIME.alive(pid) and time.monotonic() < until:
+                time.sleep(.02)
+            self.assert_stopped(pid)
+        finally:
+            run.ownership.close()
+
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows')
+    def test_windows_cleanup_failure_records_live_pids_and_closes_job(self):
+        run = self.lifecycle_fixture()
+        try:
+            run.ownership.spawn(run, [sys.executable, '-c', 'import time; time.sleep(60)'])
+            pid = run.child.pid
+            with mock.patch.object(RUNTIME._kernel32, 'GenerateConsoleCtrlEvent', return_value=0), \
+                 mock.patch.object(RUNTIME._kernel32, 'TerminateJobObject', return_value=0):
+                with self.assertRaises(RUNTIME.RunError) as caught:
+                    run.cleanup(strict=False)
+            self.assertEqual(caught.exception.code, 125)
+            self.assertEqual(caught.exception.status, 'CLEANUP_FAILED')
+            self.assertEqual(run.data['cleanup_live_pids'], [pid])
+            self.assertIsNone(run.ownership.job)
+            run.child.wait(timeout=3)
+            self.assert_stopped(pid)
+        finally:
+            run.ownership.close()
+
+    @unittest.skipUnless(os.name == 'nt', 'requires native Windows')
+    def test_windows_ctrl_break_cancels_supervisor_and_cleans_job(self):
+        for provider in ('codex', 'claude'):
+            for key in ('FAKE_STARTED', 'FAKE_DESCENDANT'):
+                Path(self.env[key]).unlink(missing_ok=True)
+            command = [sys.executable, str(ROOT / 'lib/provider_runtime.py'), provider, 'run',
+                       '--model', 'fixture-model', '--timeout', '15', '--', 'fixture prompt']
+            process = subprocess.Popen(command, cwd=self.caller, env={**self.env, 'FAKE_MODE': 'orphan'},
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                       creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            try:
+                leader = self.wait_path(Path(self.env['FAKE_STARTED']))
+                descendant = self.wait_path(Path(self.env['FAKE_DESCENDANT']))
+                process.send_signal(signal.CTRL_BREAK_EVENT)
+                stdout, stderr = process.communicate(timeout=6)
+                self.assertEqual(process.returncode, 128 + signal.SIGBREAK, stderr)
+                start = json.loads(stdout.splitlines()[0].split(' ', 1)[1])
+                receipt = json.loads(Path(start['receipt']).read_text())
+                self.assertEqual(receipt['status'], 'CANCELLED')
+                self.assert_stopped(leader)
+                self.assert_stopped(descendant)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.communicate(timeout=3)
+
     def test_exit_marker_is_printed_when_the_receipt_cannot_be_saved(self):
         run = self.lifecycle_fixture()
         def vanish():
@@ -550,6 +761,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
         self.assertEqual(exit_line['rc'], 2)
         self.assertEqual(exit_line['receipt_error'], 'FileNotFoundError')
 
+    @unittest.skipUnless(os.name == 'posix', 'requires POSIX signals, ps or pty')
     def test_signal_during_timeout_cleanup_keeps_the_timeout_cause(self):
         for key in ('FAKE_STARTED', 'FAKE_DESCENDANT'):
             Path(self.env[key]).unlink(missing_ok=True)

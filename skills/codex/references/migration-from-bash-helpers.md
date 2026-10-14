@@ -21,7 +21,11 @@ pair under the same names. Every break a migrating caller must handle:
   `--network`, overriding a config that enables it; `--no-search` also emits
   `web_search="disabled"`.
 - An empty final message is exit 4 `MISSING`, never a silent success.
-- `ps` is required; native Windows/Git Bash is rejected (the old script ran
-  under Git Bash).
+- POSIX still requires `ps`. Native Windows/Git Bash uses kill-on-close Job
+  Objects, with suspended launch, assignment before resume, then Ctrl+Break and
+  bounded job termination. Orphaned descendants are included; cleanup failure
+  is terminal (`125`, `CLEANUP_FAILED`). `.cmd`/`.bat` arguments with cmd
+  metacharacters are rejected; Windows prompts use stdin. `python3` must be a
+  real interpreter, not the Microsoft Store alias.
 - New: `--timeout`, `--preflight-timeout`, `--companion`, `--cli`, `--keep`;
   7-day retention sweep of finished run directories.

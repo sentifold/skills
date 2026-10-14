@@ -20,11 +20,12 @@ Linear and Mermaid are outside this release; `pr-arch-review` is retired.
 
 ## Install
 
-Requirements: Python **3.11+**, Git, Bash, POSIX `ps` with
-`ps -axo pid=,pgid=,stat=` and `ps -o stat= -p <pid>` support, access to this private repo, and the
-CLI for each runtime you use. Provider helpers require a POSIX process model
-(macOS/Linux); native Windows is not qualified by this release. Authentication
-and model availability remain personal runtime settings.
+Requirements: Python **3.11+**, Git, Bash, access to this private repo, and the
+CLI for each runtime you use. Provider helpers support macOS/Linux/WSL through
+POSIX process groups and native Windows (Git Bash) through Job Objects.
+POSIX hosts need `ps -axo pid=,pgid=,stat=` and `ps -o stat= -p <pid>` support.
+On Windows, `python3` must resolve to a real interpreter, not the Microsoft
+Store alias. Authentication and model availability remain personal runtime settings.
 
 Check out a reviewed commit or release, keeping the whole checkout at a stable
 path. The provider scripts depend on the repository's `lib/`; copying individual

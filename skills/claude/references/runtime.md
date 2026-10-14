@@ -69,16 +69,16 @@ text is interpreted as lifecycle control. A completed process may still give an
 incomplete review: the caller checks required sections/scope/coverage itself.
 
 The default 1800-second deadline includes preflight and stdin consumption.
-Every subprocess gets its own POSIX session/group. TERM/INT or timeout sends TERM
-to that owned group, then KILL after a bounded grace period; a signal arriving
+On POSIX, every subprocess gets its own session/group. TERM/INT or timeout
+sends TERM to that owned group, then KILL after a bounded grace period; a signal arriving
 during that cleanup is recorded as `deferred_signals` and never replaces the
 first cause. Normal descendants are also stopped if their leader exits early:
 after a leader exit, a descendant that cannot be verified (no `ps`) or stopped
 is a `cleanup_warning` in the receipt and the child's exit code stands; exit
 125 `CLEANUP_FAILED` is reserved for timeout/cancel paths with live members
 remaining. No detached watcher is launched.
-SIGKILL of the supervisor and deliberate independent-session daemonization are
-outside this cleanup guarantee. A `DIED` receipt requires inspecting the owned
+On POSIX, SIGKILL of the supervisor and deliberate independent-session
+daemonization are outside this cleanup guarantee. A `DIED` receipt requires inspecting the owned
 processes/workspace before restarting writes; never kill by executable name.
 
 Watcher selection uses the latest run-specific START (or supplied receipt),
@@ -94,8 +94,8 @@ owns the deadline.
 
 Helper codes: 0 success; 2 usage/preflight; 3 missing login under legacy auth
 check; 4 missing result; 124 timeout; 125 incomplete process cleanup;
-127 missing executable; 130/143 cancellation; otherwise the child's failure
-code (128+signal for a signal death). The codes are ambiguous on their own: a
+127 missing executable; 130/143 cancellation (149 for Windows Ctrl+Break);
+otherwise the child's failure code (128+signal for a signal death). The codes are ambiguous on their own: a
 child exiting 2, 3, 4, 124, 125 or 127 passes through unchanged and a probe
 that dies by signal or exits 126+ is reported as 2. Read the receipt's
 `status`, `diagnostic` and `child_exit_code` for the cause.
@@ -108,8 +108,14 @@ not suppress these files, caches, wrapper/service logs or logs caused by
 inherited settings. macOS/Linux/WSL require Python 3.10+, POSIX process groups
 and a working `ps` (the runtime lists the owned group through it; interpreters
 without `os.waitid`, CPython before 3.13 on macOS, also poll the leader with
-it). Native Windows Python/Git Bash is rejected rather than pretending to
-terminate a process tree.
+it). Native Windows (Git Bash + Python 3.10+) uses a kill-on-close Job Object.
+The CLI starts suspended and is assigned before resume; cancellation, timeout
+and leftover descendants get Ctrl+Break followed by bounded job termination.
+Orphaned descendants remain owned. Cleanup failure is terminal (`125`,
+`CLEANUP_FAILED`). `.cmd`/`.bat` arguments with cmd metacharacters are rejected;
+Windows prompts use stdin and the empty MCP configuration uses a file. Options
+requiring quoted JSON (such as `--output-schema`) need a native CLI executable.
+`python3` must resolve to a real interpreter, not the Microsoft Store alias.
 
 Known limits: the capability probe matches literal flag names in
 `claude --help` (including `--no-chrome` and, with `--effort`, `--effort`), so
@@ -122,7 +128,7 @@ in the help text therefore falls back to a functional probe -- a closed-stdin,
 promptless `-p` invocation that fails locally before any network/model call
 either way, distinguishing "unknown option" (truly unsupported) from any other
 local failure (supported but undocumented) -- instead of failing the run on
-text absence alone. Interpreters without `os.waitid` fork `ps` on every poll
+text absence alone. POSIX interpreters without `os.waitid` fork `ps` on every poll
 tick for the whole run; prefer CPython 3.13+ for long runs. The supervisor is
-single-threaded (signal handlers plus a `preexec_fn`); `Run` is not safe to
+single-threaded (signal handlers plus a POSIX `preexec_fn`); `Run` is not safe to
 drive from a threaded harness.
