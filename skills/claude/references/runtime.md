@@ -19,6 +19,9 @@ services. `--agent` permits a separately installed agent with its own behavior.
 It does not deny provider network access or make permitted shell commands offline.
 The surrounding OS/harness determines local network access. There is no blanket
 claim that a read-only tool policy prevents every possible shell/Git side effect.
+The pre-approved Git and `rg` commands carry deny rules for their options that
+write a file or run a command; the rules match the command text, so a bundled
+short option such as `git grep -nO<cmd>` still escapes them.
 
 ## Network
 

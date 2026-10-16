@@ -37,7 +37,9 @@ configuration, process or result assumptions in an automated gate.
 
 - Default `--mode read-only`: `dontAsk`, `Read,Grep,Glob,Bash`, plus
   `WebSearch,WebFetch` unless `--no-search`. Shell pre-approvals cover only plain
-  `git diff/status/show/log/rev-parse/merge-base/grep` and `rg` commands.
+  `git diff/status/show/log/rev-parse/merge-base/grep` and `rg` commands, and
+  deny their options that write a file or run a command: `--output` on
+  `git diff/log/show`, `git grep -O`/`--open-files-in-pager`, `rg --pre`.
   Use the repo as cwd; a `git -C ...` form does not match those grants.
 - `--mode workspace-write`: `acceptEdits` and adds `Edit,Write`. Use only for an
   authorized implementation handoff. This is a permission policy, **not an OS
