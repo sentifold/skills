@@ -542,8 +542,8 @@ class Run:
         help_text = self.probe(cli, flags, "capabilities")
         required = ("--ephemeral", "--sandbox", "--model", "--output-last-message") if self.provider == "codex" else (
             "--no-session-persistence", "--output-format", "--permission-mode",
-            "--allowedTools", "--tools", "--strict-mcp-config", "--mcp-config", "--model",
-            "--disable-slash-commands", "--no-chrome")
+            "--allowedTools", "--disallowedTools", "--tools", "--strict-mcp-config", "--mcp-config",
+            "--model", "--disable-slash-commands", "--no-chrome")
         if self.args.effort and self.provider == "claude":
             required += ("--effort",)
         missing = [flag for flag in required if flag not in help_text]
@@ -605,6 +605,14 @@ class Run:
         tools = ["Read", "Grep", "Glob", "Bash"]
         allowed = ["Read", "Grep", "Glob", *[f"Bash(git {verb} *)" for verb in (
             "diff", "status", "show", "log", "rev-parse", "merge-base", "grep")], "Bash(rg *)"]
+        # Those grants take any arguments, including the options that make a read
+        # write a file (`--output`) or run a command (`git grep -O`/`--open-files-
+        # in-pager`, `rg --pre`). A deny rule wins over an allow rule. Rules match
+        # the command text, so a bundled short option (`git grep -nO<cmd>`) still
+        # gets through: this is a permission policy, not a sandbox.
+        denied = [*[f"Bash(git {verb} *--output*)" for verb in ("diff", "log", "show")],
+                  "Bash(git grep -O*)", "Bash(git grep * -O*)", "Bash(git grep *--op*)",
+                  "Bash(rg *--pre *)", "Bash(rg *--pre=*)"]
         if a.search and a.mode == "read-only":
             tools += ["WebSearch", "WebFetch"]
             allowed += ["WebSearch", "WebFetch"]
@@ -624,7 +632,7 @@ class Run:
         argv = [cli, "-p", "--output-format", "json", "--no-session-persistence",
                 "--max-turns", str(a.max_turns), "--permission-mode",
                 "dontAsk" if a.mode == "read-only" else "acceptEdits",
-                "--allowedTools", *allowed, "--tools", ",".join(tools),
+                "--allowedTools", *allowed, "--disallowedTools", *denied, "--tools", ",".join(tools),
                 "--disable-slash-commands", "--no-chrome", "--strict-mcp-config",
                 "--mcp-config", mcp_config, "--model", a.model]
         if a.effort:

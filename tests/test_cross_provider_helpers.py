@@ -42,7 +42,7 @@ if args in (['--help'], ['exec', '--help']):
         print('--model')
     else:
         print('--ephemeral --sandbox --model --output-last-message --no-session-persistence '
-              '--output-format --max-turns --permission-mode --allowedTools --tools --effort '
+              '--output-format --max-turns --permission-mode --allowedTools --disallowedTools --tools --effort '
               '--strict-mcp-config --mcp-config --disable-slash-commands --no-chrome')
     sys.exit(0)
 if args == ['auth', 'status', '--json']:
@@ -195,6 +195,11 @@ class CrossProviderHelpersTests(unittest.TestCase):
                             self.assertIn('--no-session-persistence', args)
                             self.assertEqual('--effort' in args, bool(effort))
                             self.assertEqual(args[args.index('--permission-mode') + 1], 'dontAsk')
+                            denied = args[args.index('--disallowedTools') + 1:args.index('--tools')]
+                            for rule in ('Bash(git diff *--output*)', 'Bash(git log *--output*)',
+                                         'Bash(git show *--output*)', 'Bash(git grep * -O*)',
+                                         'Bash(git grep *--op*)', 'Bash(rg *--pre *)'):
+                                self.assertIn(rule, denied)
                             for key in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL'):
                                 self.assertFalse(payload['key_vars'][key])
 
