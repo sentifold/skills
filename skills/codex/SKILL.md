@@ -152,8 +152,10 @@ may remain inherited: `read-only` is the selected CLI sandbox mode, not a claim
 that every external integration is incapable of mutation. Match those settings
 to the authorized task before delegating work.
 
-`--ephemeral` avoids saved Codex session rollouts; it does not erase caches,
-wrapper/service logs or this helper's explicit run files. Read-only Git queries
+The helper runs Codex with its own `--ephemeral`, which avoids saved
+session rollouts; the helper itself takes no such flag (a run passed one
+fails at parse time). Ephemeral does not erase caches, wrapper/service logs
+or this helper's explicit run files. Read-only Git queries
 are valid; writes to linked worktree Git metadata may need separate permissions.
 macOS, Linux and WSL with Python 3.10+ and a working `ps` (procps) are
 supported: the runtime lists the owned process group through `ps`, and
