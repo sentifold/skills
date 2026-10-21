@@ -66,7 +66,7 @@ inside the project checkout.
    profile never imports another project's commands. A filled example:
    `examples/sleash.project-workflow.md`; the reference with product gates is
    `.agents/project-workflow.md` in gamejam.
-3. **Codex: allow nested agents.** The review-agent topology
+3. **Codex: allow nested agents.** The heavy review-agent topology
    (caller → `review-orchestrator` → `review-lens`) needs
    `[features] multi_agent = true` and `[agents] max_depth = 2` in
    `config.toml`: the user-level `~/.codex/config.toml` (checked by `doctor`) or

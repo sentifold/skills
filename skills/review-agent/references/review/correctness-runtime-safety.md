@@ -21,7 +21,7 @@ Always selected — the one lens every run carries. Second-order scope: `/code-r
 **Bar for reporting**: a finding comes with its failing scenario — the concrete input, sequence, or interleaving that produces the wrong behavior. If you cannot construct the scenario, it is not a finding. Demand retry/degradation machinery only where a reachable failure path needs it — never as a checklist.
 
 Do not use this layer for:
-- local single-path logic slips a first-order pass already covered — report only when severe and clearly missed; when assigned the standalone fallback, include local logic defects too
+- local single-path logic slips a first-order pass already reported — do not repeat them, but report one it missed whatever its severity; when assigned the standalone fallback, or a range no first-order pass read, include local logic defects there too
 - module placement or design direction (Design & Architecture)
 - contract shape between modules or with third-party APIs (Contracts & Standards)
 - completeness across entry points and workflows (Port Fidelity & Follow-through)

@@ -8,8 +8,8 @@ description: >-
   model-invocable copy of Claude Code's stock /code-review, pinned to its
   max-effort tier; the stock code-review skill is the per-effort-level
   original. Invoke for an explicitly requested first-order review or the
-  orchestrate Code Review gate's first-order leg; do not auto-trigger from
-  ambient review intent.
+  first-order leg of orchestrate's heavy Code Review gate; do not
+  auto-trigger from ambient review intent.
 disable-model-invocation: false
 context: fork
 agent: general-purpose
@@ -21,14 +21,15 @@ agent: general-purpose
      invocations. Refresh by expanding the stock skill on the new CLI and
      re-applying the local adaptations: the revision-range argument in
      Phase 0, the optional shared scope-helper sentence in Phase 0, the
-     ReportFindings-or-text fallback in Output, and the fork frontmatter
-     (context/agent). This provenance does not assert a new license for the
-     upstream text; no standalone license notice accompanied the source
-     copied from gamejam. -->
+     ReportFindings-or-text fallback in Output, the fork frontmatter
+     (context/agent), and no count limits (every candidate per angle and in
+     the sweep, every surviving finding in the report). This provenance
+     does not assert a new license for the upstream text; no standalone
+     license notice accompanied the source copied from gamejam. -->
 
 # Code Review
 
-`max effort → 5+5 angles × 8 candidates → 1-vote verify → sweep → ≤15 findings`
+`max effort → 5+5 angles, every candidate → 1-vote verify → sweep → every surviving finding`
 
 You are reviewing for **recall** at maximum effort: catch every real bug. At
 this level, catching real bugs matters more than avoiding false positives — a
@@ -47,10 +48,11 @@ target instead. Treat this diff as the review scope. When the shared
 installed with the `review-agent` package), it can record the resolved
 base/head for the report; it is optional and never replaces the commands above.
 
-## Phase 1 — Find candidates (5 correctness angles + 3 cleanup angles + 1 altitude angle + 1 conventions angle, up to 8 each)
+## Phase 1 — Find candidates (5 correctness angles + 3 cleanup angles + 1 altitude angle + 1 conventions angle)
 
 Run **10 independent finder angles** via the Agent tool. Each
-surfaces **up to 8 candidate findings**. Do NOT let one angle's conclusions
+surfaces **every candidate finding** it can tie to a quoted line and a concrete
+failure scenario — no count limit. Do NOT let one angle's conclusions
 suppress another's — if two angles flag the same line for different reasons,
 record both. If the Agent tool is not available in your current tool set, do
 not error — perform each angle (and each verification) yourself, sequentially,
@@ -141,8 +143,8 @@ report can cite it. If no CLAUDE.md applies, return nothing for this angle.
 Cleanup, altitude, and conventions candidates use the same
 `file`/`line`/`summary` shape; in `failure_scenario`, state the concrete
 cost (what is duplicated, wasted, harder to maintain, or which CLAUDE.md rule
-is broken) instead of a crash. Correctness bugs always outrank cleanup,
-altitude, and conventions findings when the output cap forces a cut.
+is broken) instead of a crash. Correctness bugs always rank ahead of
+cleanup, altitude, and conventions findings.
 
 ## Phase 2 — Verify (1-vote, 3-state)
 
@@ -173,21 +175,22 @@ or anchor; second-tier footguns (dataclass default evaluated once, `hash()`
 non-determinism, lock-scope shrink, predicate methods with side effects);
 setup/teardown asymmetry in tests; config defaults flipped.
 
-Surface **up to 8 additional candidates**, each naming a defect not already on
+Surface **every additional candidate**, each naming a defect not already on
 the list. If nothing new, return an empty sweep — do not pad.
 
 ## Output
 
 If the ReportFindings tool is in your tool set, call it once to report this
-review's results with `{level, findings}`. `findings` is at most 15 entries ranked
+review's results with `{level, findings}`. `findings` holds every surviving
+finding — the verified candidates and the sweep's additions — ranked
 most-severe first; each entry has `file`, `line`, `summary`,
 `short_summary` — the claim compressed to ≤60 characters, no rationale
 or consequence clause — `failure_scenario`, and `category` — a short
 kebab-case slug for the angle that produced it (`correctness`,
 `simplification`, `efficiency`, `reuse`, `altitude`, `conventions`, or a more
 specific slug like `test-coverage` when one fits better) — plus `verdict`
-when a verify pass produced one. If more than 15 survive, keep the 15 most
-severe. If nothing survives verification, call it with an empty array. Do not
+when a verify pass produced one. Keep every finding that survives; there is
+no maximum. If nothing survives verification, call it with an empty array. Do not
 also print the findings as text, and do not create or publish an artifact of
 the review - the tool call is the report. Without the ReportFindings tool (a
 forked or headless run), return the same ranked findings as your final text

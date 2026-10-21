@@ -1,14 +1,15 @@
 ---
 name: review-agent
 disable-model-invocation: true
-description: "Second-order layered review of a change scope — assumes a first-order /code-review (orchestrate runs its /claude-stock-code-review copy) or codex review pass already ran; an orchestrator subagent picks the relevant lenses, runs own-engine lens subagents plus a cross-provider leg, validates findings, and reports exact coverage. Use only when the user invokes review-agent or an explicitly invoked workflow names this gate."
+argument-hint: "[light|heavy] [scope]"
+description: "Second-order layered review of a change scope — assumes a first-order pass (orchestrate's Code Review gate, /code-review, or codex review) already ran; an orchestrator subagent picks the relevant lenses, inspects them itself (light, the default) or through own-engine lens subagents (heavy), runs a cross-provider leg, validates findings, and reports exact coverage. Use only when the user invokes review-agent or an explicitly invoked workflow names this gate."
 ---
 
 # Review Agent
 
 Layered, cross-validated review of a change scope, built on native subagents —
 no external runner. This is the **second-order** pass: it assumes the
-first-order generalists — `/code-review` (orchestrate runs its
+first-order generalists — `/code-review` (orchestrate runs its angles from the
 `/claude-stock-code-review` copy; `codex review` also counts) and `/simplify` —
 already ran on this scope, the way the orchestrate pipeline's Code Review gate
 runs them per step. It does not re-hunt what those tools own (local correctness
@@ -45,12 +46,21 @@ to PROJECT_ROOT; a link in this package is relative to the linking file.
 ## Topology
 
 The **calling agent** does exactly one thing: spawn a single
-**`review-orchestrator`** subagent, passing the change scope, then relay the
+**`review-orchestrator`** subagent with the change scope and weight, then relay the
 orchestrator's report. Both runtimes install the def from this package
 (`agents/claude/review-orchestrator.md` and
 `agents/codex/review-orchestrator.toml`). The def is deliberately thin: it Reads
 this file and executes the orchestrator role below. Keep the user's session
 clean — no lens work in the caller.
+
+The **weight** is named by the person, or by the workflow that invokes this
+pass: `light` (the default) or `heavy` (`/review-agent heavy <scope>`). In
+light the orchestrator applies every lens this file assigns to a subagent
+itself, in one pass while the cross-provider leg runs, and spawns no lens or
+verifier children, so it needs no nested spawn: the caller always spawns it,
+and the nested-spawn fallbacks below are heavy's alone. Heavy runs the fan-out
+as written. Scope, checks, lens selection, the cross-provider leg, validation and
+the result contract are the same in both, and the report names the weight.
 
 Spawn it in the **foreground** and wait for it synchronously by default. A
 background spawn is allowed when the caller genuinely has other lanes to
@@ -141,9 +151,10 @@ The **orchestrator** owns the whole run:
    subagents per run**, hard cap; `review/correctness-runtime-safety.md` is
    always one of them. Engage the first-order fallback only when the user
    says no first-order pass ran on this scope, or asks for a full standalone
-   review. Do not auto-escalate when relevance is unclear; note the skipped
-   borderline lens in the report instead. "Full review" may select all five
-   review lenses, but is not the default.
+   review; its narrower form covers the ranges the caller names as read by no
+   first-order pass. Do not auto-escalate when relevance is unclear; note the
+   skipped borderline lens in the report instead. Select every lens the
+   diff's surfaces call for, all five when all apply.
 4. **Run both legs in parallel.** You own this run to completion: **do not end
    your turn while a child is still working** — spawn each wave with the
    synchronous form of the agent call (`run_in_background: false`) so the call
@@ -156,7 +167,9 @@ The **orchestrator** owns the whole run:
    a narrower wave is fine, an abandoned one is not. Use bounded waves fitting
    the observed runtime capacity; do not assume a fixed nesting depth or
    concurrent-child limit.
-   - **Own-engine leg**: spawn one `review-lens` child per selected lens (or
+   - **Own-engine leg**: in light, your own pass (see the weight above),
+     made after launching the cross-provider leg in the background and before
+     waiting on it; in heavy, spawn one `review-lens` child per selected lens (or
      `general-purpose` where that def is absent); group 2–3 closely related
      lenses into one subagent when the diff is small. Each subagent gets:
      PROJECT_ROOT, the exact scope (commit IDs and digest), the lens doc
@@ -176,7 +189,7 @@ The **orchestrator** owns the whole run:
      helper contract.
 5. **Validate.** Merge and dedupe findings from both legs. Every finding that
    survives must be verified against the actual code — by you, or by a small
-   bounded verifier subagent for contested or high-severity ones. Drop what
+   bounded verifier subagent (heavy only) for contested or high-severity ones. Drop what
    does not survive; mark provenance (`corroborated` when both legs found it,
    `single-leg` otherwise). Distinguish introduced regressions from existing
    causes exposed by this change. "No issues found" is a valid outcome. Do not
@@ -186,7 +199,7 @@ The **orchestrator** owns the whole run:
    the old snapshot only. Re-review affected coverage when authorized; do not
    certify the newer tree with stale results.
 7. **Report.** Return findings and coverage directly to the caller: finding
-   counts by severity, the top findings, lens selection with one-line
+   counts by severity, every verified finding, lens selection with one-line
    rationale, legs status (effective model, effort, turns, failures), and the
    report path when one was written. Write a report file only when requested
    by the user or the target project contract, using a caller-selected local
@@ -310,7 +323,7 @@ the diff's archetype — the smallest set that covers the diff's actual
 surfaces, not the cap. When more surfaces genuinely apply (e.g. the linter
 lens on top of a full review set), group closely related lenses into one
 subagent instead of exceeding the cap, and name the skipped borderline lens
-in the report. A full pass (all five) is user-opt-in only, never the default.
+in the report. When all five archetypes apply, all five are selected.
 
 | Diff archetype | Add |
 |----------------|-----|
@@ -321,7 +334,7 @@ in the report. A full pass (all five) is user-opt-in only, never the default.
 | new module / cross-module redesign / structural re-platforming / wrapper architecture | [`review/design-architecture.md`](references/review/design-architecture.md) + `review/contracts-standards.md` |
 | build system / wrappers / scripts / platform code / hot paths / process lifecycle | [`review/platform-performance.md`](references/review/platform-performance.md) |
 | docs, comments, or the API surface docs describe | [`linter/documentation-consistency.md`](references/linter/documentation-consistency.md) |
-| trivial or docs-only code diff | correctness lens alone |
+| trivial code diff | correctness lens alone |
 
 ### First-order fallback
 
@@ -336,17 +349,20 @@ subagent, plus
 [`linter/speculative-complexity-cleanup.md`](references/linter/speculative-complexity-cleanup.md)
 when new abstractions, fallbacks, or indirection appear. The five-subagent cap
 still holds — group lenses rather than dropping relevant coverage silently.
+When the caller names ranges no first-order pass read (fixes made after a
+lane's last review), both legs own local single-path logic defects within
+those ranges, without the linter lenses.
 
 ## Runtime notes
 
 - **Claude Code**: the caller launches the `review-orchestrator` subagent
-  with the Agent tool; the orchestrator launches lens/verifier subagents
+  with the Agent tool; in heavy, the orchestrator launches lens/verifier subagents
   (`review-lens`, or `general-purpose` where that def is absent) with its own
   Agent tool when nested spawn is supported. Subagents inherit the session
   model; the def deliberately pins none.
 - **Codex**: subagents are named-only, so the package installs two Codex defs —
   the caller spawns `review-orchestrator` with the scope in the prompt, and
-  the orchestrator spawns one `review-lens` instance per selected lens. Those
+  in heavy the orchestrator spawns one `review-lens` instance per selected lens. Those
   children need `[agents] max_depth = 2` in the Codex config (the installer
   warns when it is absent). Neither def pins a model — they inherit the
   session's. Mind the runtime's concurrent-children cap (`max_threads`,
@@ -377,8 +393,10 @@ snapshot, both provider legs completed, applicable required checks are accounted
 for, and surviving findings were verified. It does not mean the change has no
 findings. Missing required coverage stays INCOMPLETE even if a user accepts
 proceeding; record that acceptance separately. Scope drift cannot certify the
-current tree. Sequential native inspection is disclosed and counts only when
-independent native reviewers were not a project requirement.
+current tree. Sequential native inspection — a light run's own pass, reported
+in the legs status as `own-engine: orchestrator pass (light)` — is disclosed
+and counts only when independent native reviewers were not a project
+requirement.
 
 Include: repository and exact scope (commit IDs, digest); system model;
 selected/skipped lenses and why; check results; each leg's status and effective

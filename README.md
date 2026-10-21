@@ -109,7 +109,8 @@ with its project profile and an install pointer in its README in the same change
 
 Start a new session in the target project after installing. Read its `AGENTS.md`
 and CI instructions first. Invoke `/orchestrate` in Claude Code or `$orchestrate`
-in Codex with a concrete task. The shared workflow discovers the project's base,
+in Codex with a concrete task; its reviews run light unless you name `heavy`
+(`/orchestrate heavy <task>`). The shared workflow discovers the project's base,
 checks and optional `.agents/project-workflow.md`; it never assumes `develop`,
 a native game runtime, or permission to merge/deploy.
 
@@ -137,7 +138,7 @@ binary or another model bypasses a user's wrapper. Logs contain version/run IDs,
 not credentials. `doctor` checks installation and CLI versions; it does not prove
 a model can run or that a user's inherited configuration isolates network/auth.
 For Codex it reads `config.toml` and warns only when `features.multi_agent` or
-`agents.max_depth` (2 for the review topology) is missing or too low.
+`agents.max_depth` (2 for the heavy review topology) is missing or too low.
 
 ## Update, rollback and uninstall
 
