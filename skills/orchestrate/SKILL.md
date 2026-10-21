@@ -462,13 +462,15 @@ calling the gate.
 **Proceed only when the native and cross-provider reviews agree the solution is
 sound.** Reconcile every finding with concrete code evidence; fix actionable
 in-scope defects, then repeat only the affected checks. In light that is one
-fix-delta check once the fixes change behavior: a fresh reviewer subagent (a
-Codex driver re-reads the delta itself) over `<reviewed-head>..HEAD` and the
-enclosing functions, given the verified list and the remit of
-`claude-stock-code-review`'s Phase 3 — what the fixes broke or missed, not
-re-confirmation — reporting every candidate on the same terms, plus one
-cross-provider pass over the same delta. The driver verifies what they find; fixing it starts no
-further round. If a pass comes back `blocked`, the two reviews
+fix-delta check once the fixes change behavior: commit the fixes, then a fresh
+reviewer subagent (a Codex driver re-reads the delta itself) over
+`<reviewed-head>..HEAD` and the enclosing functions, given the verified list
+and the remit of `claude-stock-code-review`'s Phase 3 — what the fixes broke
+or missed, not re-confirmation — reporting every candidate on the same terms,
+plus one cross-provider pass over the same delta. The driver verifies what
+they find; fixing it starts no further round, and those last fixes reach the
+Final Review as a range no first-order pass read.
+If a pass comes back `blocked`, the two reviews
 conflict on a material point, or fixing a finding needs a broader redesign than
 the finding names, that is a **Code Review gate failure — stop and ask**.
 
@@ -650,8 +652,9 @@ the last commit.
    review across the full scope: project-encoded, cross-cutting, and
    architectural risk on top of the first-order reviews the Code Review gate already ran per
    step — the skill's default lens set assumes exactly that. Pass it the
-   scope, the weight, the first-order receipts, the project profile, and the
-   outstanding limitations. Run it by
+   scope, the weight, the first-order receipts with any ranges no first-order
+   pass read (fixes made after a lane's last review), the project profile,
+   and the outstanding limitations. Run it by
    spawning the **`review-orchestrator` subagent** with the scope (both
    runtimes ship the def; the skill's topology is its contract) —
    never through the Skill tool: `review-agent` is explicit-only

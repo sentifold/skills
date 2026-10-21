@@ -23,13 +23,13 @@ agent: general-purpose
      Phase 0, the optional shared scope-helper sentence in Phase 0, the
      ReportFindings-or-text fallback in Output, the fork frontmatter
      (context/agent), and no count limits (every candidate per angle and in
-     the sweep, every verified finding in the report). This provenance does not assert a new license for the
-     upstream text; no standalone license notice accompanied the source
-     copied from gamejam. -->
+     the sweep, every surviving finding in the report). This provenance
+     does not assert a new license for the upstream text; no standalone
+     license notice accompanied the source copied from gamejam. -->
 
 # Code Review
 
-`max effort → 5+5 angles, every candidate → 1-vote verify → sweep → every verified finding`
+`max effort → 5+5 angles, every candidate → 1-vote verify → sweep → every surviving finding`
 
 You are reviewing for **recall** at maximum effort: catch every real bug. At
 this level, catching real bugs matters more than avoiding false positives — a
@@ -143,8 +143,8 @@ report can cite it. If no CLAUDE.md applies, return nothing for this angle.
 Cleanup, altitude, and conventions candidates use the same
 `file`/`line`/`summary` shape; in `failure_scenario`, state the concrete
 cost (what is duplicated, wasted, harder to maintain, or which CLAUDE.md rule
-is broken) instead of a crash. Correctness bugs always outrank cleanup,
-altitude, and conventions findings when the output cap forces a cut.
+is broken) instead of a crash. Correctness bugs always rank ahead of
+cleanup, altitude, and conventions findings.
 
 ## Phase 2 — Verify (1-vote, 3-state)
 
@@ -181,8 +181,9 @@ the list. If nothing new, return an empty sweep — do not pad.
 ## Output
 
 If the ReportFindings tool is in your tool set, call it once to report this
-review's results with `{level, findings}`. `findings` holds every verified
-finding, ranked most-severe first; each entry has `file`, `line`, `summary`,
+review's results with `{level, findings}`. `findings` holds every surviving
+finding — the verified candidates and the sweep's additions — ranked
+most-severe first; each entry has `file`, `line`, `summary`,
 `short_summary` — the claim compressed to ≤60 characters, no rationale
 or consequence clause — `failure_scenario`, and `category` — a short
 kebab-case slug for the angle that produced it (`correctness`,

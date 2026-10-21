@@ -48,7 +48,7 @@ Incrementally generated code degrades architecture in recognizable ways. When yo
 - Requests to explain empirically tuned constants without evidence that missing context causes a real error.
 - Consistency-only changes (reformatting untouched code to match new code's style).
 - Edge cases that cannot occur given the actual inputs.
-- Config values or thresholds that are tuned empirically.
+- Retuning config values or thresholds that were tuned empirically, unless the value demonstrably breaks a stated contract or limit.
 - Anything already addressed elsewhere in the same diff — read the full diff before reporting.
 - Issues a compiler, linter, or typechecker would catch — suppressed when the run's deterministic check step ran for this snapshot (its failures are recorded once as findings); report them only when that check was unavailable or not run. Never assume an unrun check passed.
 - Compatibility demands unsupported by the target project’s actual contract (see Guiding Principles).

@@ -151,9 +151,10 @@ The **orchestrator** owns the whole run:
    subagents per run**, hard cap; `review/correctness-runtime-safety.md` is
    always one of them. Engage the first-order fallback only when the user
    says no first-order pass ran on this scope, or asks for a full standalone
-   review. Do not auto-escalate when relevance is unclear; note the skipped
-   borderline lens in the report instead. "Full review" may select all five
-   review lenses, but is not the default.
+   review; its narrower form covers the ranges the caller names as read by no
+   first-order pass. Do not auto-escalate when relevance is unclear; note the
+   skipped borderline lens in the report instead. Select every lens the
+   diff's surfaces call for, all five when all apply.
 4. **Run both legs in parallel.** You own this run to completion: **do not end
    your turn while a child is still working** — spawn each wave with the
    synchronous form of the agent call (`run_in_background: false`) so the call
@@ -322,7 +323,7 @@ the diff's archetype — the smallest set that covers the diff's actual
 surfaces, not the cap. When more surfaces genuinely apply (e.g. the linter
 lens on top of a full review set), group closely related lenses into one
 subagent instead of exceeding the cap, and name the skipped borderline lens
-in the report. A full pass (all five) is user-opt-in only, never the default.
+in the report. When all five archetypes apply, all five are selected.
 
 | Diff archetype | Add |
 |----------------|-----|
@@ -333,7 +334,7 @@ in the report. A full pass (all five) is user-opt-in only, never the default.
 | new module / cross-module redesign / structural re-platforming / wrapper architecture | [`review/design-architecture.md`](references/review/design-architecture.md) + `review/contracts-standards.md` |
 | build system / wrappers / scripts / platform code / hot paths / process lifecycle | [`review/platform-performance.md`](references/review/platform-performance.md) |
 | docs, comments, or the API surface docs describe | [`linter/documentation-consistency.md`](references/linter/documentation-consistency.md) |
-| trivial or docs-only code diff | correctness lens alone |
+| trivial code diff | correctness lens alone |
 
 ### First-order fallback
 
@@ -348,6 +349,9 @@ subagent, plus
 [`linter/speculative-complexity-cleanup.md`](references/linter/speculative-complexity-cleanup.md)
 when new abstractions, fallbacks, or indirection appear. The five-subagent cap
 still holds — group lenses rather than dropping relevant coverage silently.
+When the caller names ranges no first-order pass read (fixes made after a
+lane's last review), both legs own local single-path logic defects within
+those ranges, without the linter lenses.
 
 ## Runtime notes
 
