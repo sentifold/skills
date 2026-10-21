@@ -8,8 +8,8 @@ description: >-
   model-invocable copy of Claude Code's stock /code-review, pinned to its
   max-effort tier; the stock code-review skill is the per-effort-level
   original. Invoke for an explicitly requested first-order review or the
-  orchestrate Code Review gate's first-order leg; do not auto-trigger from
-  ambient review intent.
+  first-order leg of orchestrate's heavy Code Review gate; do not
+  auto-trigger from ambient review intent.
 disable-model-invocation: false
 context: fork
 agent: general-purpose

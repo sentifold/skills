@@ -1,14 +1,15 @@
 ---
 name: review-agent
 disable-model-invocation: true
-description: "Second-order layered review of a change scope — assumes a first-order /code-review (orchestrate runs its /claude-stock-code-review copy) or codex review pass already ran; an orchestrator subagent picks the relevant lenses, runs own-engine lens subagents plus a cross-provider leg, validates findings, and reports exact coverage. Use only when the user invokes review-agent or an explicitly invoked workflow names this gate."
+argument-hint: "[light|heavy] [scope]"
+description: "Second-order layered review of a change scope — assumes a first-order pass (orchestrate's Code Review gate, /code-review, or codex review) already ran; an orchestrator subagent picks the relevant lenses, inspects them itself (light, the default) or through own-engine lens subagents (heavy), runs a cross-provider leg, validates findings, and reports exact coverage. Use only when the user invokes review-agent or an explicitly invoked workflow names this gate."
 ---
 
 # Review Agent
 
 Layered, cross-validated review of a change scope, built on native subagents —
 no external runner. This is the **second-order** pass: it assumes the
-first-order generalists — `/code-review` (orchestrate runs its
+first-order generalists — `/code-review` (orchestrate runs its angles from the
 `/claude-stock-code-review` copy; `codex review` also counts) and `/simplify` —
 already ran on this scope, the way the orchestrate pipeline's Code Review gate
 runs them per step. It does not re-hunt what those tools own (local correctness
@@ -45,12 +46,21 @@ to PROJECT_ROOT; a link in this package is relative to the linking file.
 ## Topology
 
 The **calling agent** does exactly one thing: spawn a single
-**`review-orchestrator`** subagent, passing the change scope, then relay the
+**`review-orchestrator`** subagent with the change scope and weight, then relay the
 orchestrator's report. Both runtimes install the def from this package
 (`agents/claude/review-orchestrator.md` and
 `agents/codex/review-orchestrator.toml`). The def is deliberately thin: it Reads
 this file and executes the orchestrator role below. Keep the user's session
 clean — no lens work in the caller.
+
+The **weight** is named by the person, or by the workflow that invokes this
+pass: `light` (the default) or `heavy` (`/review-agent heavy <scope>`). In
+light the orchestrator applies every lens this file assigns to a subagent
+itself, in one pass while the cross-provider leg runs, and spawns no lens or
+verifier children, so it needs no nested spawn: the caller always spawns it,
+and the nested-spawn fallbacks below are heavy's alone. Heavy runs the fan-out
+as written. Scope, checks, lens selection, the cross-provider leg, validation and
+the result contract are the same in both, and the report names the weight.
 
 Spawn it in the **foreground** and wait for it synchronously by default. A
 background spawn is allowed when the caller genuinely has other lanes to
@@ -156,7 +166,8 @@ The **orchestrator** owns the whole run:
    a narrower wave is fine, an abandoned one is not. Use bounded waves fitting
    the observed runtime capacity; do not assume a fixed nesting depth or
    concurrent-child limit.
-   - **Own-engine leg**: spawn one `review-lens` child per selected lens (or
+   - **Own-engine leg**: in light, your own pass (see the weight above); in
+     heavy, spawn one `review-lens` child per selected lens (or
      `general-purpose` where that def is absent); group 2–3 closely related
      lenses into one subagent when the diff is small. Each subagent gets:
      PROJECT_ROOT, the exact scope (commit IDs and digest), the lens doc
@@ -340,13 +351,13 @@ still holds — group lenses rather than dropping relevant coverage silently.
 ## Runtime notes
 
 - **Claude Code**: the caller launches the `review-orchestrator` subagent
-  with the Agent tool; the orchestrator launches lens/verifier subagents
+  with the Agent tool; in heavy, the orchestrator launches lens/verifier subagents
   (`review-lens`, or `general-purpose` where that def is absent) with its own
   Agent tool when nested spawn is supported. Subagents inherit the session
   model; the def deliberately pins none.
 - **Codex**: subagents are named-only, so the package installs two Codex defs —
   the caller spawns `review-orchestrator` with the scope in the prompt, and
-  the orchestrator spawns one `review-lens` instance per selected lens. Those
+  in heavy the orchestrator spawns one `review-lens` instance per selected lens. Those
   children need `[agents] max_depth = 2` in the Codex config (the installer
   warns when it is absent). Neither def pins a model — they inherit the
   session's. Mind the runtime's concurrent-children cap (`max_threads`,
