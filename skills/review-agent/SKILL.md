@@ -198,7 +198,7 @@ The **orchestrator** owns the whole run:
    the old snapshot only. Re-review affected coverage when authorized; do not
    certify the newer tree with stale results.
 7. **Report.** Return findings and coverage directly to the caller: finding
-   counts by severity, the top findings, lens selection with one-line
+   counts by severity, every verified finding, lens selection with one-line
    rationale, legs status (effective model, effort, turns, failures), and the
    report path when one was written. Write a report file only when requested
    by the user or the target project contract, using a caller-selected local

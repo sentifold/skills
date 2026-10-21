@@ -408,8 +408,8 @@ legs — the third folds into the first in light and may in heavy:
      **quality** — Reuse, Simplification, Efficiency and Altitude, plus
      unreachable branches and fallbacks for states that cannot occur. Each
      returns, as text and never through ReportFindings, every candidate it
-     can tie to a quoted line and a concrete failure or cost — no count
-     limit, not even Phase 1's eight per angle — ranked most severe first and
+     can tie to a quoted line and a concrete failure or cost, with no count
+     limit, ranked most severe first and
      deduped across its angles, each with `file`, `line`, `summary`,
      `failure_scenario` and `category`. The driver dedupes them and verifies each
      against the code before fixing, with that skill's Phase 2 verdicts
@@ -433,10 +433,8 @@ legs — the third folds into the first in light and may in heavy:
    fix what it surfaces. On a small or low-risk diff, skip the separate
    pass: the native review's cleanup angles already surface reuse /
    simplification / efficiency / altitude findings — apply the worthwhile
-   ones and record `simplify: folded-into-review`. The separate pass earns
-   its extra agents only when the diff is big enough that cleanups compete
-   with bugs for the review's report cap. Light always folds it in — on
-   Claude Code, into the quality reviewer.
+   ones and record `simplify: folded-into-review`. Light always folds it in
+   — on Claude Code, into the quality reviewer.
 
 **In heavy, the forked native review can die silently.** `/claude-stock-code-review` forks
 finder subagents and a verifier; on a session model rate limit (`You've reached
