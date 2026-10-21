@@ -130,8 +130,9 @@ gates spend:
 
 - **Light** (default): the Code Review gate's native leg is three grouped
   reviewers (a Codex driver keeps its own pass) whose candidates the driver
-  verifies itself, with simplification folded into the quality reviewer; the
-  Final Review's orchestrator inspects the selected lenses itself.
+  verifies itself, with simplification folded into the quality reviewer, and
+  one reviewer over the fix delta; the Final Review's orchestrator inspects
+  the selected lenses itself.
 - **Heavy**: the native leg is `/claude-stock-code-review` (ten angles, a
   verifier per candidate, a sweep) plus `/simplify` sized to the diff; the
   Final Review spawns one lens child per selected lens.
@@ -395,17 +396,24 @@ legs — the third folds into the first in light and may in heavy:
    reviews the exact diff directly in both.
    - **Light**: Claude Code launches three reviewer subagents (Agent tool,
      `general-purpose`, told to review and never edit) over the lane's exact
-     range (`<lane-base>...HEAD`, the base SHA recorded at lane fork). Each
+     range (`<lane-base>...HEAD`, the base SHA recorded at lane fork), each
+     given the lane's intended behavior and the paths other lanes own. Each
      reads only the Phase 1 angles of
      [`claude-stock-code-review`](../claude-stock-code-review/SKILL.md),
-     runs none of its other phases, and owns one group: **inside the diff**
-     — Angles A, B, D and E; **outside it** — Angle C and Conventions, plus
-     the local review docs the project profile names; **quality** — Reuse,
-     Simplification, Efficiency and Altitude. Each returns up to eight
-     candidates per angle in that skill's finding shape, unverified. The
-     driver dedupes them and verifies each against the code before fixing;
-     no verifier agents and no sweep — the Final Review reads the fixed
-     tree.
+     runs none of its other phases, performs its angles itself in its own
+     context — never through the Agent tool — and owns one group: **inside
+     the diff** — Angles A, B, D and E, plus a doc comment deleted or
+     rewritten without its content carried over; **outside it** — Angle C
+     and Conventions, plus the local review docs the project profile names;
+     **quality** — Reuse, Simplification, Efficiency and Altitude, plus
+     unreachable branches and fallbacks for states that cannot occur. Each
+     returns, as text and never through ReportFindings, every candidate it
+     can tie to a quoted line and a concrete failure or cost — no count
+     limit, not even Phase 1's eight per angle — ranked most severe first and
+     deduped across its angles, each with `file`, `line`, `summary`,
+     `failure_scenario` and `category`. The driver dedupes them and verifies each
+     against the code before fixing, with that skill's Phase 2 verdicts
+     (CONFIRMED / PLAUSIBLE / REFUTED); no verifier agents and no sweep.
    - **Heavy**: Claude Code invokes **`/claude-stock-code-review`** — the
      shared model-invocable copy of Claude Code's stock `/code-review` (it
      runs as a forked background subagent). **Pass the lane's exact range as
@@ -447,7 +455,7 @@ fold the simplification pass into the native review.
 
 **Launch every leg that runs together, in one message, as background runs** — they
 are independent reads of the same diff; running them back-to-back is a
-scheduling bug. Because the simplification pass edits the code, reconcile at
+scheduling bug. In heavy, because the simplification pass edits the code, reconcile at
 the gate against the **post-simplify** tree: confirm each correctness finding
 still applies, and if simplification rewrote the reviewed code beyond
 mechanical cleanups, re-run the cheap native review on the final diff before
@@ -455,9 +463,14 @@ calling the gate.
 
 **Proceed only when the native and cross-provider reviews agree the solution is
 sound.** Reconcile every finding with concrete code evidence; fix actionable
-in-scope defects, then repeat only the affected checks — in light, the
-driver's own check, plus one cross-provider pass over the delta of a
-substantial fix. If a pass comes back `blocked`, the two reviews
+in-scope defects, then repeat only the affected checks. In light that is one
+fix-delta check once the fixes change behavior: a fresh reviewer subagent (a
+Codex driver re-reads the delta itself) over `<reviewed-head>..HEAD` and the
+enclosing functions, given the verified list and the remit of
+`claude-stock-code-review`'s Phase 3 — what the fixes broke or missed, not
+re-confirmation — reporting every candidate on the same terms, plus one
+cross-provider pass over the same delta. The driver verifies what they find; fixing it starts no
+further round. If a pass comes back `blocked`, the two reviews
 conflict on a material point, or fixing a finding needs a broader redesign than
 the finding names, that is a **Code Review gate failure — stop and ask**.
 
@@ -792,7 +805,7 @@ Runs concurrently:
   worktree, any source write during it triggers a reload and destroys the run
   — the same holds for a browser-test lane whose web server is that dev
   server: an edit mid-run shows up as
-  `Execution context was destroyed` failures that look like product bugs. The simplification leg of the
+  `Execution context was destroyed` failures that look like product bugs. In heavy, the simplification leg of the
   Code Review gate edits code, so it and such a live test cannot overlap in
   one lane — run the two read-only review legs alongside the live test and the
   simplification pass after it, or finish the review legs first. Ordering the

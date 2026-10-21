@@ -166,8 +166,9 @@ The **orchestrator** owns the whole run:
    a narrower wave is fine, an abandoned one is not. Use bounded waves fitting
    the observed runtime capacity; do not assume a fixed nesting depth or
    concurrent-child limit.
-   - **Own-engine leg**: in light, your own pass (see the weight above); in
-     heavy, spawn one `review-lens` child per selected lens (or
+   - **Own-engine leg**: in light, your own pass (see the weight above),
+     made after launching the cross-provider leg in the background and before
+     waiting on it; in heavy, spawn one `review-lens` child per selected lens (or
      `general-purpose` where that def is absent); group 2–3 closely related
      lenses into one subagent when the diff is small. Each subagent gets:
      PROJECT_ROOT, the exact scope (commit IDs and digest), the lens doc
@@ -187,7 +188,7 @@ The **orchestrator** owns the whole run:
      helper contract.
 5. **Validate.** Merge and dedupe findings from both legs. Every finding that
    survives must be verified against the actual code — by you, or by a small
-   bounded verifier subagent for contested or high-severity ones. Drop what
+   bounded verifier subagent (heavy only) for contested or high-severity ones. Drop what
    does not survive; mark provenance (`corroborated` when both legs found it,
    `single-leg` otherwise). Distinguish introduced regressions from existing
    causes exposed by this change. "No issues found" is a valid outcome. Do not
@@ -388,8 +389,10 @@ snapshot, both provider legs completed, applicable required checks are accounted
 for, and surviving findings were verified. It does not mean the change has no
 findings. Missing required coverage stays INCOMPLETE even if a user accepts
 proceeding; record that acceptance separately. Scope drift cannot certify the
-current tree. Sequential native inspection is disclosed and counts only when
-independent native reviewers were not a project requirement.
+current tree. Sequential native inspection — a light run's own pass, reported
+in the legs status as `own-engine: orchestrator pass (light)` — is disclosed
+and counts only when independent native reviewers were not a project
+requirement.
 
 Include: repository and exact scope (commit IDs, digest); system model;
 selected/skipped lenses and why; check results; each leg's status and effective
