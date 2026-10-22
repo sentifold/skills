@@ -125,7 +125,7 @@ The person picks the weight in the invocation: `heavy` runs the full review
 fan-out (`/orchestrate heavy <task>`, `$orchestrate heavy <task>`); `light`,
 or no weight named, runs light. Both weights run every gate with the same
 cross-provider legs, stop conditions and readiness floor, and neither pins a
-weaker model; they differ only in how many own-engine reviewers the two review
+weaker model; they differ only in how much own-engine review the two review
 gates spend:
 
 - **Light** (default): the Code Review gate's native leg is three grouped
@@ -331,8 +331,12 @@ confirm with `git diff <base-sha> -- <file>` being empty.
 **Restacking stacked lanes uses `git rebase --onto <new-base> <old-base>`.** A
 plain `rebase <new-base>` on a lane that CONTAINS its old base's commits
 replays those base commits too and conflicts against their own rewritten
-versions. Record each lane's base SHA when you fork it; restack after a base
-gains fix commits with `--onto`, then re-verify and `push --force-with-lease`.
+versions. Record each lane's base SHA when you fork it, and re-record it
+after a restack or a merge from the base — the `--onto` target, or the base
+commit the merge brought in: the review ranges are `<lane-base>...HEAD`, and
+against the stale SHA they contain every base commit since. Restack after a
+base gains fix commits with `--onto`, then re-verify and
+`push --force-with-lease`.
 After a squash or rewritten parent, verify that the child diff contains only
 its own work; never force-push unrelated user work.
 
@@ -421,7 +425,10 @@ legs — the third folds into the first in light and may in heavy:
      defaults to `@{upstream}...HEAD`, which reviews nothing once the lane's
      draft-PR branch is pushed. If the copy is unavailable in the session,
      spawn a fresh review subagent (Agent tool, `general-purpose`) over the
-     exact diff with a first-order mandate instead.
+     exact diff with a first-order mandate instead. Give either a generous
+     deadline, ~60 minutes of agent time; past it send one wrap-up message
+     if the runtime can reach the run, otherwise treat it as the silent
+     death below — never a silent wait.
 2. An independent cross-provider review focused on the area of risk: Claude
    Code uses the **`codex` skill** in review mode; Codex uses the **`claude`
    skill** read-only. Reviewers receive the intended behavior, the exact diff
@@ -435,6 +442,28 @@ legs — the third folds into the first in light and may in heavy:
    simplification / efficiency / altitude findings — apply the worthwhile
    ones and record `simplify: folded-into-review`. Light always folds it in
    — on Claude Code, into the quality reviewer.
+
+**In light, scope and budget every reviewer subagent** — the three above and
+the fix-delta one below. Hand it the exact range and short notes — the
+intended behavior in a few lines and, for the fix-delta one, the verified
+list as one line per finding (`file:line`, `summary`, `failure_scenario`) —
+never the implementation briefs, earlier review reports or PR threads they
+came from. It opens code by line range — the function or type enclosing each
+hunk, the call sites and helpers its greps turn up — never a whole source
+file, and batches its reads: one command prints several hunks, not one per
+turn. Give it a budget of ~40 tool calls or ~15 minutes of agent time; one
+that cannot finish within budget returns what it has, ranked as usual, with
+unfinished leads marked unverified and the hunks it never reached named,
+instead of exploring open-endedly. Those hunks go to a fresh reviewer with
+the same brief and budget — the lifecycle's waves — until every hunk has
+had a reader; the gate never passes on an unread hunk. The budget is the fixed
+deadline the [bounded lifecycle](../review-agent/references/lifecycle.md)
+requires of every wait: past it the driver sends one wrap-up message
+(SendMessage), never a silent wait (observed: a fix-delta reviewer handed two
+implementation briefs, three review reports and the PR thread read whole
+files and traced code one command per turn: 183 turns, a ~485k-token context,
+36 minutes of which its tools took 31 seconds, until the driver told it to
+wrap up).
 
 **In heavy, the forked native review can die silently.** `/claude-stock-code-review` forks
 finder subagents and a verifier; on a session model rate limit (`You've reached
@@ -463,11 +492,18 @@ calling the gate.
 sound.** Reconcile every finding with concrete code evidence; fix actionable
 in-scope defects, then repeat only the affected checks. In light that is one
 fix-delta check once the fixes change behavior: commit the fixes, then a fresh
-reviewer subagent (a Codex driver re-reads the delta itself) over
+reviewer subagent, scoped and budgeted as above (a Codex driver re-reads the
+delta itself), over
 `<reviewed-head>..HEAD` and the enclosing functions, given the verified list
 and the remit of `claude-stock-code-review`'s Phase 3 — what the fixes broke
 or missed, not re-confirmation — reporting every candidate on the same terms,
-plus one cross-provider pass over the same delta. The driver verifies what
+plus one cross-provider pass over the same delta. The delta is what the lane
+itself wrote since the reviewed head: its own commits
+(`git log -p --first-parent --no-merges <reviewed-head>..HEAD`) and, for a
+merge made in between, that merge's conflict resolution alone
+(`git show --remerge-diff <merge>`) — never the base commits a merge or
+restack carried in, which `git diff <reviewed-head>..HEAD` would hand the
+reviewer as if they were fixes. The driver verifies what
 they find; fixing it starts no further round, and those last fixes reach the
 Final Review as a range no first-order pass read.
 If a pass comes back `blocked`, the two reviews
