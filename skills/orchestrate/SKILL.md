@@ -145,7 +145,7 @@ changes it.
 | Need | Claude Code driver | Codex driver |
 |------|--------------------|--------------|
 | Cross-provider design/review | `codex` skill, read-only/review | `claude` skill, read-only |
-| Implementation | driver or `codex` write handoff | driver; use `claude` write only for an explicit cross-provider handoff |
+| Implementation | driver or `codex` write handoff (`--timeout 3600`) | driver; use `claude` write only for an explicit cross-provider handoff (`--timeout 3600`) |
 | First-order review | light: three grouped reviewer subagents; heavy: `/claude-stock-code-review` (copy of the stock `/code-review`) | driver reviews the exact diff |
 | Simplification | light: folded into the quality reviewer; heavy: `/simplify` (model-invocable) | driver simplification audit |
 | Final layered review | `review-orchestrator` subagent, given the weight | `review-orchestrator` agent, given the weight |
