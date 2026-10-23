@@ -48,9 +48,6 @@ noise lines.
   that denies bubblewrap user namespaces (the sandboxed run reads nothing and
   still answers; see runtime-findings). Pair it with a hard read-only line in
   the prompt and a `git status --porcelain` check afterwards.
-- Implementation handoffs routinely outlive the 1800 s default deadline; pass
-  `--timeout 3600` for a write run and resume an interrupted one with a second
-  run that continues the same working tree.
 - Choose `--cli /exact/executable` or `CODEX_BIN`; otherwise use the first PATH
   `codex`. A broken wrapper fails with a diagnostic; the helper never skips it
   for another installation or a binary inside an app bundle.
@@ -83,11 +80,18 @@ with `run_id` and `receipt`. Model text cannot supply control records. The
 receipt records the selected executable/version, status, exit code, output
 path, result digest, the child PID, `deadline_at` (wall clock, informational)
 and `deadline_remaining` (the supervisor's monotonic clock, which alone decides
-a timeout).
+a timeout). It also records the `model` and `reasoning_effort` that `codex exec`
+reports in the settings header at the top of its stderr, so a provider policy
+can be checked from the receipt alone; both are absent when the CLI prints no
+such header.
 
 `--out` must name an unused file. The helper reserves it exclusively, publishes
 only a nonempty final result after successful CLI exit, and removes its empty
 reservation on failure. An existing output is never reused or overwritten.
+If the run itself writes or replaces `--out` (a brief that names it as the
+report path), the helper leaves that file as the run left it, and the final
+message stays in the run directory: the receipt's `output` then names
+`result.txt`, not `--out`. Give a brief a report path of its own.
 Without `--out`, read the receipt's unique `output` path. A successful receipt
 proves process/result completion, not the truth or completeness of the review;
 apply the caller's expected report/schema/coverage checks too.
@@ -98,7 +102,10 @@ a run directory of this provider whose receipt is terminal (`DONE`, `FAILED`,
 seven days ago is deleted; `--keep` exempts the new run from that sweep. Copy
 evidence you must retain longer out of the run directory.
 
-The default overall deadline is 1800 seconds; `--timeout <seconds>` changes it.
+The default overall deadline is 1800 seconds for a `read-only` run and 7200
+seconds for a write run (`workspace-write`, `danger-full-access`), because an
+implementation or fix round outlasts the half hour a review fits in; a lane
+handoff inherits it. `--timeout <seconds>` changes it.
 Version/help probes are limited to 10 seconds each (`--preflight-timeout`).
 On POSIX, TERM/INT and deadline expiry terminate the owned child process group,
 wait briefly, then kill remaining group members. A signal that arrives during that
@@ -110,7 +117,8 @@ reserved for timeout/cancel paths where live members remain. No detached
 watchdog is started; `--no-watchdog` is retained as a no-op. SIGKILL of the
 POSIX supervisor and descendants that deliberately create independent sessions
 cannot be cleaned by a signal handler. Inspect the receipt/processes before
-retrying an interrupted write run.
+resuming an interrupted write run with a second run that continues the same
+working tree.
 
 For a background run, capture lifecycle stdout in a fresh log and use a bounded
 wait loop owned by the caller. The watcher itself runs once:
