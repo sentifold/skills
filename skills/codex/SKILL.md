@@ -48,6 +48,9 @@ noise lines.
   that denies bubblewrap user namespaces (the sandboxed run reads nothing and
   still answers; see runtime-findings). Pair it with a hard read-only line in
   the prompt and a `git status --porcelain` check afterwards.
+- Implementation handoffs routinely outlive the 1800 s default deadline; pass
+  `--timeout 3600` for a write run and resume an interrupted one with a second
+  run that continues the same working tree.
 - Choose `--cli /exact/executable` or `CODEX_BIN`; otherwise use the first PATH
   `codex`. A broken wrapper fails with a diagnostic; the helper never skips it
   for another installation or a binary inside an app bundle.
