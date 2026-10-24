@@ -71,7 +71,8 @@ Missing/blank payload fails. Usage fields are retained in the receipt; no model
 text is interpreted as lifecycle control. A completed process may still give an
 incomplete review: the caller checks required sections/scope/coverage itself.
 
-The default 1800-second deadline includes preflight and stdin consumption.
+The default deadline, 1800 seconds or 7200 with `--mode workspace-write`,
+includes preflight and stdin consumption.
 On POSIX, every subprocess gets its own session/group. TERM/INT or timeout
 sends TERM to that owned group, then KILL after a bounded grace period; a signal arriving
 during that cleanup is recorded as `deferred_signals` and never replaces the

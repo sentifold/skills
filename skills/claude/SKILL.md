@@ -50,10 +50,14 @@ configuration, process or result assumptions in an automated gate.
 - `--cli /exact/executable` or `CLAUDE_BIN`; otherwise first PATH `claude`.
   Failed version/capability probes stop; no alternate executable is tried.
 - `--timeout <seconds>` defaults to 1800; `--preflight-timeout` defaults to 10;
-  `--max-turns` defaults to 32. All are finite limits.
+  `--max-turns` defaults to 32. With `--mode workspace-write` the defaults are
+  7200 seconds and 1000 turns, because an implementation run outlasts a review;
+  a lane handoff inherits them. All are finite limits.
 - `--out <unused-file>` publishes a final result only after a clean CLI exit and
   successful JSON envelope. Existing files are rejected. Otherwise use the unique
-  result path in the run receipt.
+  result path in the run receipt. If the run itself writes or replaces `--out`,
+  the helper leaves that file as the run left it, and the receipt's `output`
+  names `result.txt` instead. Give a brief a report path of its own.
 - `--output-schema <file>` forwards a JSON Schema. The CLI enforces it; the helper
   extracts `structured_output` or parses JSON from `result`. The caller still
   checks task-specific report coverage. The file is validated before the run

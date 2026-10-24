@@ -50,7 +50,7 @@ def parser(provider):
     p.add_argument("--cli", help=f"exact executable; otherwise {provider.upper()}_BIN or PATH")
     p.add_argument("--cd")
     p.add_argument("--out", help="unused destination; existing files are rejected")
-    p.add_argument("--timeout", type=positive, default=1800)
+    p.add_argument("--timeout", type=positive, help="overall deadline in seconds; default 1800, 7200 for a write run")
     p.add_argument("--preflight-timeout", type=positive, default=10)
     p.add_argument("--keep", action="store_true", help="exempt this run directory from the retention sweep")
     p.add_argument("--no-watchdog", action="store_true", help="compatibility no-op; no watchdog is spawned")
@@ -68,7 +68,7 @@ def parser(provider):
     else:
         p.add_argument("--mode", choices=("read-only", "workspace-write"), default="read-only")
         p.add_argument("--agent")
-        p.add_argument("--max-turns", type=int, default=32)
+        p.add_argument("--max-turns", type=int, help="default 32, 1000 with --mode workspace-write")
         p.add_argument("--output-schema")
         p.add_argument("--auth", choices=("sanitized", "inherit", "subscription"), default="sanitized")
         p.add_argument("--allow-bash", action="append", default=[])
@@ -436,6 +436,12 @@ class Run:
         self.run_id = uuid.uuid4().hex
         self.root = self.receipt = self.result = None
         self.child = None
+        # Implementation and fix rounds outlast the half hour and 32 turns a review fits in.
+        write = (args.sandbox if provider == "codex" else args.mode) != "read-only"
+        if args.timeout is None:
+            args.timeout = 7200 if write else 1800
+        if provider == "claude" and args.max_turns is None:
+            args.max_turns = 1000 if write else 32
         self.deadline = time.monotonic() + args.timeout
         self.export = Path(args.out).absolute() if args.out else None
         self.reservation = None
@@ -672,14 +678,33 @@ class Run:
         rendered = payload if isinstance(payload, str) else json.dumps(payload, indent=2, sort_keys=True)
         self.result.write_text(rendered + "\n", encoding="utf-8")
 
+    def reservation_untouched(self):
+        # The reservation is ours only while it is still the empty file prepare() made.
+        try:
+            stat = self.export.stat()
+        except FileNotFoundError:
+            return False
+        return stat.st_ino == self.reservation and not stat.st_size
+
     def release_export(self):
-        if self.reservation and self.export:
-            try:
-                if self.export.stat().st_ino == self.reservation:
-                    self.export.unlink()
-            except FileNotFoundError:
-                pass
+        if self.reservation and self.export and self.reservation_untouched():
+            self.export.unlink(missing_ok=True)
         self.reservation = None
+
+    def record_settings(self):
+        # codex exec prints the settings it runs with between two "--------" lines
+        # at the top of stderr; a provider policy is checked against these two.
+        if self.provider != "codex" or self.data.get("phase") != "provider":
+            return
+        try:
+            with open(self.data["stderr"], encoding="utf-8", errors="replace") as handle:
+                blocks = ("\n" + handle.read(65536)).split("\n--------\n", 2)
+        except OSError:
+            return
+        for line in blocks[1].splitlines() if len(blocks) > 2 else ():
+            key, _, value = line.partition(": ")
+            if key in ("model", "reasoning effort"):
+                self.data[key.replace(" ", "_")] = value.strip()
 
     def prepare(self):
         prompt = list(self.args.prompt)
@@ -753,9 +778,11 @@ class Run:
         if not self.result.is_file() or not self.result.read_bytes().strip():
             raise RunError("Provider exited successfully without a nonempty final result", 4, "MISSING")
         digest = hashlib.sha256(self.result.read_bytes()).hexdigest()
+        if self.export and not self.reservation_untouched():
+            # The run wrote or replaced --out itself (a brief naming it as its report
+            # path). That file stays as the run left it; the final message stays here.
+            self.export = self.reservation = None
         if self.export:
-            if self.export.stat().st_ino != self.reservation:
-                raise RunError("Reserved output was replaced by another process; refusing publication")
             # Atomic publication on the destination filesystem, including cross-volume --out.
             fd, temp = tempfile.mkstemp(prefix=f".{self.export.name}-{self.run_id}-", dir=self.export.parent)
             try:
@@ -808,6 +835,7 @@ class Run:
                 rc, status = 125, "CLEANUP_FAILED"
                 self.data["diagnostic"] = f"Could not complete process cleanup: {type(exc).__name__}"
             self.release_export()
+            self.record_settings()
             exit_fields = dict(rc=rc, status=status, receipt=str(self.receipt), output=self.data.get("output"))
             try:
                 self.save(status=status, exit_code=rc, finished_at=time.time())
@@ -890,7 +918,7 @@ def main():
         p.error("--model must not be empty")
     if provider == "codex" and args.fast and args.no_fast:
         p.error("--fast and --no-fast/--nofast are mutually exclusive")
-    if provider == "claude" and args.max_turns < 1:
+    if provider == "claude" and args.max_turns is not None and args.max_turns < 1:
         p.error("--max-turns must be positive")
     return Run(provider, args).run()
 
