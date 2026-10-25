@@ -8,6 +8,7 @@ policy stay in each consuming repo's `AGENTS.md` and optional
 | Package | Runtime | Entry |
 | --- | --- | --- |
 | `orchestrate` | Claude Code, Codex | Explicit workflow invocation |
+| `orchestrate-linked-sessions` | Claude Code, Codex | Explicit workflow invocation; a copy of `orchestrate` |
 | `review-agent` | Claude Code, Codex | Explicit layered review, or orchestrate's named final gate |
 | `github-create-pr` | Claude Code, Codex | Create/update a PR when requested |
 | `codex` | Claude Code | Explicit second-provider task or authorized workflow leg |
