@@ -25,6 +25,29 @@
       ]
     },
     {
+      "name": "orchestrate-linked-sessions",
+      "runtimes": [
+        "codex",
+        "claude"
+      ],
+      "requires": {
+        "codex": [
+          "review-agent",
+          "github-create-pr",
+          "claude"
+        ],
+        "claude": [
+          "review-agent",
+          "github-create-pr",
+          "codex",
+          "claude-stock-code-review"
+        ]
+      },
+      "required_files": [
+        "skills/orchestrate-linked-sessions/agents/openai.yaml"
+      ]
+    },
+    {
       "name": "review-agent",
       "runtimes": [
         "codex",

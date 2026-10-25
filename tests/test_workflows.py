@@ -17,7 +17,8 @@ import install
 
 ROOT = Path(__file__).resolve().parents[1]
 SCOPE = ROOT / "skills/review-agent/scripts/resolve_scope.py"
-WORKFLOWS = ("orchestrate", "review-agent", "github-create-pr", "claude-stock-code-review")
+WORKFLOWS = ("orchestrate", "orchestrate-linked-sessions", "review-agent", "github-create-pr",
+             "claude-stock-code-review")
 PROFILE_TEMPLATE = ROOT / "templates/project-workflow.md"
 PROFILE_SECTIONS = (
     "Scope, branches and PRs",
@@ -290,7 +291,7 @@ class WorkflowPackageTests(unittest.TestCase):
             self.assertIn("description:", frontmatter)
             ui = (ROOT / "skills" / name / "agents/openai.yaml").read_text()
             self.assertIn("$" + name, ui)
-            if name in ("orchestrate", "review-agent"):
+            if name in ("orchestrate", "orchestrate-linked-sessions", "review-agent"):
                 self.assertIn("disable-model-invocation: true", frontmatter)
                 self.assertIn("allow_implicit_invocation: false", ui)
 
