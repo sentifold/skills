@@ -62,11 +62,14 @@ and the nested-spawn fallbacks below are heavy's alone. Heavy runs the fan-out
 as written. Scope, checks, lens selection, the cross-provider leg, validation and
 the result contract are the same in both, and the report names the weight.
 
-Spawn it in the **foreground** and wait for it synchronously by default. A
-background spawn is allowed when the caller genuinely has other lanes to
-advance, but it does not transfer the obligation: the caller is done only once
-it holds a result that opens with the completion line below. **A completion
-notification is not a result.** An orchestrator that stops with "the legs are
+Wait for it synchronously where the runtime lets the caller wait on a child
+(`claude -p`, the Agent SDK, Codex). Claude Code's interactive clients — the
+terminal, and since 2.1.302 the desktop app and VS Code — run every subagent
+the main conversation spawns in the background: the report arrives as a
+completion notification in a later turn, so advance other ready work or end
+the turn, and never poll. Neither shape transfers the obligation: the caller
+is done only once it holds a result that opens with the completion line
+below. **A completion notification is not a result.** An orchestrator that stops with "the legs are
 running" produces a notification indistinguishable from a finished run — if
 what comes back is not the report shape, resume it (see "Resuming an
 interrupted run") and never relay a progress note as the review.
