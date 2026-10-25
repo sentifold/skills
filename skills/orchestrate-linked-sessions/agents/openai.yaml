@@ -1,6 +1,0 @@
-interface:
-  display_name: "Orchestrate linked sessions"
-  short_description: "Opt-in plan -> validate -> small PRs -> implement -> review -> test pipeline with gated concurrent lanes."
-  default_prompt: "Use $orchestrate-linked-sessions to carry this engineering task through its applicable gates."
-policy:
-  allow_implicit_invocation: false

@@ -412,7 +412,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(f"Source: {self.root} (Git {revision})", text)
         self.assertIn("Packages: claude: claude-stock-code-review, codex, github-create-pr, orchestrate, "
                       "orchestrate-linked-sessions, review-agent; "
-                      "codex: claude, github-create-pr, orchestrate, orchestrate-linked-sessions, review-agent", text)
+                      "codex: claude, github-create-pr, orchestrate, review-agent", text)
         self.assertIn(f"install/update: {self.home / '.claude/skills/orchestrate'} -> {self.root / 'skills/orchestrate'}\n", text)
         self.assertIn(f"adopt symlink: {self.home / '.agents/skills/orchestrate'} -> {self.root / 'skills/orchestrate'} (was -> old orchestrate)\n", text)
         self.assertIn(f"remove legacy duplicate: {self.home / '.codex/skills/review-agent'} (was -> old legacy review)\n", text)
@@ -605,8 +605,7 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("CLI missing from PATH", output.getvalue())
             self.assertIn("config.toml not found", output.getvalue())
             self.assertIn("Verified: installed links and rendered agents match this checkout.", output.getvalue())
-            self.assertIn("codex: packages claude, github-create-pr, orchestrate, orchestrate-linked-sessions, review-agent; "
-                          "agents review-lens, review-orchestrator; "
+            self.assertIn("codex: packages claude, github-create-pr, orchestrate, review-agent; agents review-lens, review-orchestrator; "
                           "no legacy duplicates in the old Codex skill roots", output.getvalue())
 
     def test_doctor_reads_codex_nesting_configuration(self):
@@ -658,13 +657,13 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         result = subprocess.run([sys.executable, "-c", driver], capture_output=True, text=True)
         self.assertEqual(result.returncode, 137, result.stderr)
         journal = json.loads(self.locations.journal.read_text())
-        self.assertEqual(len(journal["changes"]), 15)
+        self.assertEqual(len(journal["changes"]), 14)
         self.assertNotIn(str(self.locations.receipt), {change["path"] for change in journal["changes"]})
         return journal
 
     def test_hard_crash_leaves_a_journal_and_the_next_plan_recovers_written_changes(self):
         adopted = self.fixture_link(".agents/skills/orchestrate", "before installation")
-        journal = self.crash_apply(writes_before_crash=6)
+        journal = self.crash_apply(writes_before_crash=5)
         self.assertEqual(adopted.resolve(), self.root / "skills/orchestrate")
         self.assertTrue((self.locations.claude / "agents/review-lens.md").is_file())
         self.assertFalse((self.locations.claude / "agents/review-orchestrator.md").exists())
@@ -673,7 +672,7 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         self.assertEqual(journal["entries"][str(adopted)]["restore"], "before installation")
         plan = self.plan()
         self.assertEqual(plan.recovered_pid, journal["pid"])
-        self.assertIn("6 of 15 journaled changes had been written and are owned again", plan.notes[0])
+        self.assertIn("5 of 14 journaled changes had been written and are owned again", plan.notes[0])
         self.assertNotIn(adopted, {change.path for change in plan.changes})
         self.assertNotIn(self.locations.claude / "agents/review-lens.md", {change.path for change in plan.changes})
         self.assertIn(self.locations.claude / "agents/review-orchestrator.md", {change.path for change in plan.changes})
@@ -682,7 +681,7 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         self.assertEqual(self.plan().changes, [])
         receipt = json.loads(self.locations.receipt.read_text())
         self.assertEqual(receipt["entries"][str(adopted)]["restore"], "before installation")
-        self.assertEqual(len(receipt["entries"]), 15)
+        self.assertEqual(len(receipt["entries"]), 14)
         self.perform(uninstall=True)
         self.assertEqual(os.readlink(adopted), "before installation")
         self.assertFalse((self.locations.claude / "agents/review-lens.md").exists())
@@ -703,13 +702,13 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         self.crash_apply(writes_before_crash=0)
         self.assertFalse((self.home / ".agents/skills/orchestrate").exists())
         plan = self.plan()
-        self.assertIn("0 of 15 journaled changes", plan.notes[0])
-        self.assertEqual(len(plan.changes), 16)
+        self.assertIn("0 of 14 journaled changes", plan.notes[0])
+        self.assertEqual(len(plan.changes), 15)
         install.apply(plan)
         self.assertFalse(self.locations.lock.exists())
         self.assertEqual(self.plan().changes, [])
         shutil.rmtree(self.home)
-        self.crash_apply(writes_before_crash=16, after_last_write=True)
+        self.crash_apply(writes_before_crash=15, after_last_write=True)
         self.assertTrue(self.locations.receipt.exists())
         plan = self.plan()
         self.assertEqual(plan.changes, [])

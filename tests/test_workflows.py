@@ -283,17 +283,24 @@ class WorkflowPackageTests(unittest.TestCase):
                 self.assertIn("Investigation", doc)
 
     def test_skill_metadata_preserves_explicit_workflow_entrypoints(self):
+        catalog = json.loads((ROOT / "catalog.json").read_text())
+        codex = {package["name"] for package in catalog["packages"] if "codex" in package["runtimes"]}
         for name in WORKFLOWS:
             text = (ROOT / "skills" / name / "SKILL.md").read_text()
             self.assertTrue(text.startswith("---\n"), name)
             frontmatter = text.split("---", 2)[1]
             self.assertIn("name: " + name + "\n", frontmatter)
             self.assertIn("description:", frontmatter)
-            ui = (ROOT / "skills" / name / "agents/openai.yaml").read_text()
-            self.assertIn("$" + name, ui)
+            ui_path = ROOT / "skills" / name / "agents/openai.yaml"
+            if name in codex:
+                self.assertTrue(ui_path.is_file(), name)
+            ui = ui_path.read_text() if ui_path.is_file() else ""
+            if ui:
+                self.assertIn("$" + name, ui)
             if name in ("orchestrate", "orchestrate-linked-sessions", "review-agent"):
                 self.assertIn("disable-model-invocation: true", frontmatter)
-                self.assertIn("allow_implicit_invocation: false", ui)
+                if ui:
+                    self.assertIn("allow_implicit_invocation: false", ui)
 
     def test_github_create_pr_skill_is_portable_and_keeps_generic_rules(self):
         text = (ROOT / "skills/github-create-pr/SKILL.md").read_text()
