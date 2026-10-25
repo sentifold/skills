@@ -8,7 +8,7 @@ policy stay in each consuming repo's `AGENTS.md` and optional
 | Package | Runtime | Entry |
 | --- | --- | --- |
 | `orchestrate` | Claude Code, Codex | Explicit workflow invocation |
-| `orchestrate-linked-sessions` | Claude Code, Codex | Explicit workflow invocation; a copy of `orchestrate` |
+| `orchestrate-linked-sessions` | Claude Code (desktop app) | Explicit workflow invocation; `orchestrate` with every lane as a linked session |
 | `review-agent` | Claude Code, Codex | Explicit layered review, or orchestrate's named final gate |
 | `github-create-pr` | Claude Code, Codex | Create/update a PR when requested |
 | `codex` | Claude Code | Explicit second-provider task or authorized workflow leg |
@@ -111,7 +111,9 @@ with its project profile and an install pointer in its README in the same change
 Start a new session in the target project after installing. Read its `AGENTS.md`
 and CI instructions first. Invoke `/orchestrate` in Claude Code or `$orchestrate`
 in Codex with a concrete task; its reviews run light unless you name `heavy`
-(`/orchestrate heavy <task>`). The shared workflow discovers the project's base,
+(`/orchestrate heavy <task>`). In the Claude desktop app,
+`/orchestrate-linked-sessions` runs the same loop with every lane as a linked
+session of its own. The shared workflow discovers the project's base,
 checks and optional `.agents/project-workflow.md`; it never assumes `develop`,
 a native game runtime, or permission to merge/deploy.
 

@@ -2,7 +2,7 @@
 name: orchestrate-linked-sessions
 disable-model-invocation: true
 argument-hint: "[light|heavy] <task>"
-description: "Opt-in cross-runtime orchestration workflow that turns a scope into right-sized, cross-provider-validated, reviewed, clean-state-tested draft PRs landing directly on the target project's base branch. The calling Claude Code or Codex runtime drives the work and uses the other engine through the installed codex/claude counterpart skill. Use ONLY when the caller explicitly names `orchestrate-linked-sessions`, invokes `/orchestrate-linked-sessions` or `$orchestrate-linked-sessions`, or explicitly asks for this plan -> validate -> small PRs -> implement -> review -> test workflow. It chains github-create-pr, the live-test executor the project profile names for the surface under change, the project's profiling route, review-agent, and the project's cross-platform tooling. Do NOT auto-trigger from ordinary 'plan and implement' / feature / bugfix requests — those follow the project's AGENTS.md default behavior; this is the heavyweight gated pipeline, opt-in only. Explicit invocation in any language counts (e.g. 'прогони задачу через orchestrate-linked-sessions'); a generic 'implement this' does not."
+description: "Opt-in orchestration workflow for Claude Code in the Claude desktop app that turns a scope into right-sized, cross-provider-validated, reviewed, clean-state-tested draft PRs landing directly on the target project's base branch, with every lane built by a linked session of its own. The invoking session drives the work, each lane session runs its gates and its reviewer subagents, and Codex is the other engine through the installed codex skill. Use ONLY when the caller explicitly names `orchestrate-linked-sessions` or invokes `/orchestrate-linked-sessions`, or explicitly asks for this plan -> validate -> lanes as linked sessions -> review -> test workflow. It chains github-create-pr, the live-test executor the project profile names for the surface under change, the project's profiling route, review-agent, and the project's cross-platform tooling. Do NOT auto-trigger from ordinary 'plan and implement' / feature / bugfix requests — those follow the project's AGENTS.md default behavior; this is the heavyweight gated pipeline, opt-in only. Explicit invocation in any language counts (e.g. 'прогони задачу через orchestrate-linked-sessions'); a generic 'implement this' does not. Outside the desktop app it stops and names `/orchestrate`."
 ---
 
 # Orchestrate linked sessions
@@ -14,9 +14,27 @@ quickly as possible: independent sub-tasks execute as **concurrent lanes**,
 questions batch into single round-trips, and PRs go ready the moment their
 gates clear. This is an orchestrator: it owns the planning, scheduling, gates, and
 delivery coordination while driving the installed shared skills and the target
-project's own skills. Run it from either Claude Code or Codex; the calling
-runtime is the driver and uses the other engine for independent validation and
-review.
+project's own skills. It is `orchestrate` for Claude Code in the Claude
+desktop app, which can start **linked sessions**: the session the person
+invoked it in is the **driver** — intake, the Design gate, the whole-scope
+gates and landing — and every lane is a **linked session** of its own, in its
+own worktree, that implements, reviews and tests its slice and reports back;
+its reviewers and executors are its subagents. Codex is the other engine for
+independent validation and review, through the installed `codex` skill.
+
+## Runtime
+
+The driver needs the desktop app's session tools: the one that starts a
+linked session (`mcp__ccd_session__start_session`), messaging between
+sessions (`SendMessage`, addressed by a lane's `name` or `parent`), and the
+listing and stopping of linked sessions (`mcp__ccd_session_mgmt__list_sessions`
+with `linked`, `mcp__ccd_session_mgmt__stop_session`). Check they are exposed
+before intake. Where they are not — the terminal, VS Code, Codex — stop and
+name `/orchestrate`, which runs the same loop with the driver scheduling the
+lanes itself; this skill never falls back to that shape on its own, because a
+run that mixed the two could not say which session owns a lane. A start is
+refused in a turn that another session's message or an automated event began,
+so lanes start only in turns the person began.
 
 ## Roots and the project profile
 
@@ -30,8 +48,9 @@ repository being changed. Do not look for them in the target repository.
 with `git rev-parse --show-toplevel` from the user's working directory. Every
 command that inspects or changes the product runs with an explicit target
 working directory (`git -C`, `--cd`), never the package root. Resolve
-`PROJECT_ROOT` **per lane worktree** — a lane's worktree is its own root and
-reads the profile checked out there — and **per repository** in a cross-repo
+`PROJECT_ROOT` **per lane worktree** — a lane session's worktree is its own
+root and working directory, and it reads the profile checked out there — and
+**per repository** in a cross-repo
 scope; a lane never edits another lane's repo through an implicit working
 directory.
 
@@ -65,9 +84,9 @@ skill's separate consent boundary. Record the chosen routes in the gate plan.
 
 Use this skill only when:
 - the user explicitly names `orchestrate-linked-sessions` or invokes
-  `/orchestrate-linked-sessions` (Claude Code) / `$orchestrate-linked-sessions` (Codex)
-- the user asks for this plan -> validate -> small-PRs -> review -> test
-  workflow by description
+  `/orchestrate-linked-sessions`, in Claude Code in the Claude desktop app
+- the user asks for this plan -> validate -> lanes as linked sessions ->
+  review -> test workflow by description
 
 Do not auto-trigger from generic repo work, a language, file paths, or task
 intent alone. A project's `AGENTS.md` keeps this workflow opt-in; ordinary
@@ -90,21 +109,28 @@ tasks follow the default "smallest direct change" behavior, not this ceremony.
   continuing. Record that validation happened after the initial implementation;
   never claim it was pre-code.
 - **Lanes, not phases.** After the Design gate, each independent sub-task runs as its own
-  **lane** — worktree + warm build → implement → Code Review → Live Test — and lanes advance
-  concurrently (2–3 at a time on a shared machine). The driver schedules lanes
-  and evaluates gates; it does not walk one phase across the whole scope. See
-  [Parallelization](#parallelization).
+  **lane** — a linked session in its own worktree: set up → implement → Code
+  Review → Live Test — and lanes advance concurrently (2–3 at a time on a
+  shared machine), on their own turns. The driver starts lanes, answers them
+  and evaluates the whole-scope gates; it does not walk one phase across the
+  whole scope, and it writes no lane's code. See
+  [Parallelization](#parallelization) and [Lanes as sessions](#lanes-as-sessions).
 - **Never wait idle.** If the only thing running is a single background op and
   any lane has ready work, start that work before waiting. Before any
   stop-and-ask, bring every other lane to a running state so the wait overlaps
-  machine work instead of freezing it.
-- **Delegate for isolation, not lower quality.** The main agent holds the
-  big-picture context; hand off well-scoped work to native subagents that return
-  compact results. Live app driving / UI verification → the tester executor the
-  project profile names for the surface. Performance captures → the profiler
-  executor the profile names. Inherit the session model and reasoning defaults
-  for native children; never pin a delegated role to a weaker model or lower
-  effort merely to save tokens.
+  machine work instead of freezing it. A lane is never waited on: the driver
+  ends its turn and the app continues it when the lanes report, and a lane
+  that needs an answer sooner messages it.
+- **Delegate for isolation, not lower quality.** A lane is a session, not a
+  subagent: it keeps a context of its own across turns, asks the person
+  itself, and hands the driver a line, not its transcript. Inside a session,
+  the main agent holds the big-picture context and hands off well-scoped work
+  to native subagents that return compact results. Live app driving / UI
+  verification → the tester executor the project profile names for the
+  surface. Performance captures → the profiler executor the profile names.
+  Lanes and native children inherit the driver's
+  model, effort and permission mode; never start a lane or pin a delegated
+  role on a weaker model or lower effort merely to save tokens.
 - **Stop and ask whenever a decision is ambiguous or a gate fails.** A silent
   guess at a fork is worse than a one-line question. See [Stop conditions](#stop-conditions).
 - **Bounded waits only.** Never wait unbounded on a remote, a background Codex
@@ -113,8 +139,8 @@ tasks follow the default "smallest direct change" behavior, not this ceremony.
   [bounded lifecycle](../review-agent/references/lifecycle.md) (bounded calls
   of at most 60 seconds, retained handles, a fixed overall deadline) and the
   bounded-wait tooling the project profile names, not a hand-rolled `until`
-  loop. Probe an ephemeral cross-provider run through its `codex` or `claude`
-  skill watcher, never a blind poll. Before calling a slow producer stalled,
+  loop. Probe an ephemeral cross-provider run through the `codex` skill's
+  watcher, never a blind poll. Before calling a slow producer stalled,
   check its actual progress (the profile records platform-specific probes for
   its own artifacts); a failed probe proves neither progress nor a stall, and
   a healthy producer is never stopped on directory metadata alone.
@@ -122,39 +148,38 @@ tasks follow the default "smallest direct change" behavior, not this ceremony.
 ## Weight
 
 The person picks the weight in the invocation: `heavy` runs the full review
-fan-out (`/orchestrate-linked-sessions heavy <task>`, `$orchestrate-linked-sessions heavy <task>`); `light`,
+fan-out (`/orchestrate-linked-sessions heavy <task>`); `light`,
 or no weight named, runs light. Both weights run every gate with the same
 cross-provider legs, stop conditions and readiness floor, and neither pins a
 weaker model; they differ only in how much own-engine review the two review
 gates spend:
 
 - **Light** (default): the Code Review gate's native leg is three grouped
-  reviewers (a Codex driver keeps its own pass) whose candidates the driver
-  verifies itself, with simplification folded into the quality reviewer, and
-  one reviewer over the fix delta; the Final Review's orchestrator inspects
-  the selected lenses itself.
+  reviewers whose candidates the lane verifies itself, with simplification
+  folded into the quality reviewer, and one reviewer over the fix delta; the
+  Final Review's orchestrator inspects the selected lenses itself.
 - **Heavy**: the native leg is `/claude-stock-code-review` (ten angles, a
   verifier per candidate, a sweep) plus `/simplify` sized to the diff; the
   Final Review spawns one lens child per selected lens.
 
-Record the weight in the scope record and at closure; only the person
-changes it.
+Record the weight in the scope record, in every lane brief and at closure;
+only the person changes it.
 
 ## Runtime mapping
 
-| Need | Claude Code driver | Codex driver |
-|------|--------------------|--------------|
-| Cross-provider design/review | `codex` skill, read-only/review | `claude` skill, read-only |
-| Implementation | driver or `codex` write handoff | driver; use `claude` write only for an explicit cross-provider handoff |
-| First-order review | light: three grouped reviewer subagents; heavy: `/claude-stock-code-review` (copy of the stock `/code-review`) | driver reviews the exact diff |
-| Simplification | light: folded into the quality reviewer; heavy: `/simplify` (model-invocable) | driver simplification audit |
-| Final layered review | `review-orchestrator` subagent, given the weight | `review-orchestrator` agent, given the weight |
+| Need | Who | How |
+|------|-----|-----|
+| Cross-provider design validation / review | the driver / the lane | `codex` skill, read-only/review |
+| Implementation | the lane | itself, or a `codex` write handoff into its own worktree |
+| First-order review | the lane | light: three grouped reviewer subagents; heavy: `/claude-stock-code-review` (copy of the stock `/code-review`) |
+| Simplification | the lane | light: folded into the quality reviewer; heavy: `/simplify` (model-invocable) |
+| Final layered review | the driver | `review-orchestrator` subagent, given the weight |
 
-The counterpart skills are asymmetric by design: `codex` is Claude-only and
-`claude` is Codex-only. Never invoke the skill that targets the driver's own
-engine: Claude Code cannot use `claude`, and Codex cannot use `codex`. Read the
-counterpart's `SKILL.md` under `SKILLS_ROOT` before the first run; its helper
-requires `--cd "$PROJECT_ROOT"` and an absolute, unused output path.
+The counterpart is the `codex` skill; `claude` is Codex-only and never used
+here. Read its `SKILL.md` under `SKILLS_ROOT` before the first run — the
+driver before the Design gate, each lane before its first handoff; its helper
+requires `--cd` naming the checkout the run works in and an absolute, unused
+output path.
 
 **Model selection.** Both provider helpers require an explicit model and never
 substitute one. Take it, in order, from the project profile's "Provider policy"
@@ -244,7 +269,9 @@ is bookkeeping, and only these four things:
   consumer/provider version dependencies explicitly.
 - **Every per-repo gate runs per repo**, with that repo's own checks and its
   own conventions — each repo's profile or CI instructions name them; the
-  other repo's `AGENTS.md` and profile do not apply to it.
+  other repo's `AGENTS.md` and profile do not apply to it. A lane in the
+  other repository is a session started in that repository's folder (`cwd`,
+  a place `list_start_targets` names), with its own worktree there.
 - **The Final Review gate runs once per repo**, not once per scope. Hand each
   run the other repo's worktree as read-only context so the lens that owns
   contracts can read both sides of the wire.
@@ -261,9 +288,8 @@ For each sub-task, design the approach: owner/surface, files to touch, contract
 delta, and how it will be verified. Inspect existing mechanisms before
 proposing new ones, consider a simpler alternative, and justify the choice
 from the code. Then **validate the design before writing any
-code** with the cross-provider counterpart in read-only mode: Claude Code uses
-the **`codex` skill**; Codex uses the **`claude` skill**. Hand it the approach
-and the files to read, and ask it to flag wrong owners, missed contracts,
+code** with the cross-provider counterpart in read-only mode: the driver uses
+the **`codex` skill**. Hand it the approach and the files to read, and ask it to flag wrong owners, missed contracts,
 simpler alternatives, and risks.
 
 Design gate validations are read-only and independent of each other, so **launch them as
@@ -281,6 +307,9 @@ before any further edit or commit. A clean result passes the Design gate as
 `ran: adopted-existing-work`; a material design defect fails the gate normally. This
 exception makes an already-started task usable without falsifying gate order.
 
+A lane is never started before its design passes; its brief carries the
+design as validated, refinements folded in.
+
 ### 2 — Slice into right-sized draft PRs
 
 Split the validated work into draft PRs **sized by justification, not by a
@@ -292,8 +321,10 @@ resolve it the way the **`github-create-pr` skill** does (stack parent,
 name is universal. Stack them as a chain when there are dependencies (each PR
 targets the previous branch in the chain — see the **`github-create-pr`
 skill**, "PR Chains"). Follow the project profile's branch-naming
-policy; absent one, the caller runtime's own convention applies unless the
-user asks for another name.
+policy: the app names a lane's branch from the slug the driver passes, under
+the person's branch prefix and with a suffix of its own, so pass the slug
+that gives the name the policy wants, and take the final name from the lane's
+first report.
 
 Each PR gets a clear description. Add a diagram only when it materially shortens
 the explanation, following the **`github-create-pr` skill**: use a minimal
@@ -305,22 +336,28 @@ paragraph it clarifies.
 **Open each PR as a draft early** — as soon as its branch has a first commit
 (from phase 3) — via the **`github-create-pr` skill**, with the base set to
 the project base (or the previous branch in a stacked chain), so the review and
-test gates attach to a real PR.
+test gates attach to a real PR. The lane opens it from its worktree, and the
+app's PR monitor follows the session that opened it.
 
-### 3 — Implement in an isolated worktree
+### 3 — Implement in a lane session
 
-Give each validated task **its own worktree** — a plain
-`git worktree add <absolute-path> -b <branch> <base>` is the whole setup,
-plus whatever per-worktree provisioning the project profile names (env
-seeding hooks, LFS or submodule hydration, dependency installs). If that
-automation misfires, fix the hook installation rather than hand-seeding files;
-the profile points at the project's worktree guide.
+Give each validated task **its own linked session** in **its own worktree**:
+the driver starts it — `start_session` with `initiation: user_asked` (the
+person's invocation and their answers at intake are the ask), `context:
+fresh`, `use_worktree: true`, `source_branch` the lane's base, `branch_name`
+the slice's slug, `name` a short lane handle, `wake_when_done: true`, and no
+`model` or `effort` — and the app cuts the worktree from the base. The lane
+provisions it with whatever the project profile names (env seeding, LFS or
+submodule hydration, dependency installs, the project's worktree setup
+command). If that automation misfires, fix the hook installation rather than
+hand-seeding files; the profile points at the project's worktree guide.
 
-**Worktree paths are ABSOLUTE, always.** A relative `git worktree add
-<dir>/<name>` resolves against the shell's cwd at that moment, and
-in a chained background call an earlier `cd` silently plants the worktree at a
-nested wrong path (observed: a `worktrees/` directory nested inside itself), which then breaks
-package-manager workspace links when moved. Pass the full repo-rooted path every time.
+**The brief is the lane's whole world.** A fresh session has seen nothing of
+this conversation: the `prompt` carries [the lane brief](#the-lane-brief)
+below and `background` the scope in a few lines. Keep the same text under the
+run's evidence path (`.local/orchestrate/<run>/lanes/<lane>/task.md` by
+default): the Final Review reads it, and a lane whose session is lost is
+restarted from it.
 
 **Reverting one file in a lane means checking it out from the lane's base, not from HEAD.**
 `git checkout -- <file>` restores the index/HEAD version, which already contains the
@@ -338,49 +375,44 @@ against the stale SHA they contain every base commit since. Restack after a
 base gains fix commits with `--onto`, then re-verify and
 `push --force-with-lease`.
 After a squash or rewritten parent, verify that the child diff contains only
-its own work; never force-push unrelated user work.
+its own work; never force-push unrelated user work. A lane restacks its own
+branch; the driver asks for it by message and waits for the new head.
 
-**Run `git worktree add` as a backgrounded call when checkout is slow** (LFS,
-submodules, large trees — the profile says which). A killed `add` leaves
-the worktree registered but half-checked-out: `locked` with reason
-`initializing`, a partial index that `git status` reports as mass deletions,
-and a stale `.git/worktrees/<name>/index.lock`. Recover by confirming no `git`
-process is alive, deleting that lock, `git worktree unlock`, then
-`git reset --hard HEAD` to finish the checkout — do not re-run `add`. Chain any
-per-lane dependency install the profile names after the checkout in the same
-background call.
-
-**A Claude Code session cannot Write/Edit files in another lane's worktree.** The session is
-pinned to its own worktree, and the Write and Edit tools refuse paths in any other one ("belongs to a
-different worktree"). For a lane you implement yourself outside the session's worktree, write the
-content to the scratchpad and copy or patch it in with a Bash/Python step (then re-read the result),
-or hand the lane to a `codex` write run with `--cd` pointing at that worktree. Plan this before
-opening several lanes, so the driver does not discover it mid-edit (observed on a three-lane run:
-every cross-worktree edit had to be re-routed).
+**One session, one worktree.** The driver never writes into a lane's worktree
+and never runs git there; a lane never writes into another lane's or the
+driver's — the Write and Edit tools refuse such paths anyway ("belongs to a
+different worktree"). A fix another lane needs, a restack, a revert, a re-run:
+all travel as a message to the session that owns the worktree, which does it
+and reports the new head.
 
 **Check work in flight on the same surface before the Design gate.** Another session may already own
 part of the scope (observed: a sibling PR adding the same asset surfaced only in a live-test
-screenshot, after both designs were implemented). `gh pr list --search` over the touched paths and
-the runtime's agent listing (`ListAgents` in Claude Code) are cheap; an overlap found early is a
+screenshot, after both designs were implemented). `gh pr list --search` over the touched paths, the
+runtime's agent listing (`ListAgents`) and the app's session list are cheap; an overlap found early is a
 scope question, found late it is a restack.
 
-**Open lanes eagerly:** create each
-worktree and start the background warm-up build the project profile names while that sub-task's
-Design gate validation is still running — a worktree and a warm binary are
-design-neutral, and cold builds on the Live Test critical path are one of the biggest
-measured time sinks. Just write no code until the Design gate passes.
+**Start lanes in turns the person began, within the cap.** A start is refused
+in a turn that another session's message or an automated event began, so
+lanes start in the turn in which their Design validations return, or in the
+one after a Hard Stop's answer — every lane of the scope at once, the ones
+beyond the concurrent-lane cap too. A lane within the cap starts at once; a
+lane beyond it sets up its worktree and the warm build the profile names,
+reports `ready` and writes no code until the driver's `go` (SendMessage, by
+the lane's name), sent as a slot frees. Nothing is lost in the wait: the brief
+already carries the design as validated.
 
-The driver may implement directly or delegate according to the runtime mapping.
-Any implementation handoff gets the same contract: **surgical edits only, DO
+The lane may implement directly or hand the work to a `codex` write run into
+its own worktree (`--cd` its worktree path). Any implementation handoff gets
+the same contract: **surgical edits only, DO
 NOT commit** (leave the tree dirty), run the named tests, print a short summary.
 Each worker receives the absolute checkout path, the task contract, its owned
 paths, the base SHA, the relevant project instructions, the test expectations,
 and the warning that other agents are working concurrently and their changes
 must be preserved.
-Then **the driver re-runs the tests itself, reviews `git diff`, and commits**
+Then **the lane re-runs the tests itself, reviews `git diff`, and commits**
 with proper attribution — never trust a "tests passed" claim without re-running.
-Parallel writers are safe only on **disjoint file sets**; tell each worker which
-paths the others own.
+Parallel writers are safe only on **disjoint file sets**; the brief tells each
+lane which paths the other lanes own, and the lane tells its workers.
 
 Building happens as part of running the named tests. When a change needs the
 product actually launched to be exercised, go through the live-test executor
@@ -396,10 +428,9 @@ immutable snapshot: give every leg the same exact base/head (the shared
 not edit the tree while a leg reads it. Run all three
 legs — the third folds into the first in light and may in heavy:
 
-1. A native correctness review, by [weight](#weight). The Codex driver
-   reviews the exact diff directly in both.
-   - **Light**: Claude Code launches three reviewer subagents (Agent tool,
-     `general-purpose`, told to review and never edit) over the lane's exact
+1. A native correctness review, by [weight](#weight), run by the lane.
+   - **Light**: the lane launches three reviewer subagents (Agent tool,
+     `general-purpose`, told to review and never edit) over its exact
      range (`<lane-base>...HEAD`, the base SHA recorded at lane fork), each
      given the lane's intended behavior and the paths other lanes own. Each
      reads only the Phase 1 angles of
@@ -415,10 +446,10 @@ legs — the third folds into the first in light and may in heavy:
      can tie to a quoted line and a concrete failure or cost, with no count
      limit, ranked most severe first and
      deduped across its angles, each with `file`, `line`, `summary`,
-     `failure_scenario` and `category`. The driver dedupes them and verifies each
+     `failure_scenario` and `category`. The lane dedupes them and verifies each
      against the code before fixing, with that skill's Phase 2 verdicts
      (CONFIRMED / PLAUSIBLE / REFUTED); no verifier agents and no sweep.
-   - **Heavy**: Claude Code invokes **`/claude-stock-code-review`** — the
+   - **Heavy**: the lane invokes **`/claude-stock-code-review`** — the
      shared model-invocable copy of Claude Code's stock `/code-review` (it
      runs as a forked background subagent). **Pass the lane's exact range as
      the argument** (`<lane-base>...HEAD`): with no argument its diff
@@ -429,19 +460,18 @@ legs — the third folds into the first in light and may in heavy:
      deadline, ~60 minutes of agent time; past it send one wrap-up message
      if the runtime can reach the run, otherwise treat it as the silent
      death below — never a silent wait.
-2. An independent cross-provider review focused on the area of risk: Claude
-   Code uses the **`codex` skill** in review mode; Codex uses the **`claude`
-   skill** read-only. Reviewers receive the intended behavior, the exact diff
-   and the relevant project constraints, without being steered to rubber-stamp
+2. An independent cross-provider review focused on the area of risk: the
+   lane uses the **`codex` skill** in review mode. Reviewers receive the
+   intended behavior, the exact diff and the relevant project constraints,
+   without being steered to rubber-stamp
    an implementation.
 3. A simplification pass, **sized to the diff** in heavy: on a substantial diff,
-   Claude Code invokes the **`/simplify`** skill (it is model-invocable) and
-   Codex performs an explicit simplification audit over the final diff —
-   fix what it surfaces. On a small or low-risk diff, skip the separate
+   the lane invokes the **`/simplify`** skill (it is model-invocable) — fix
+   what it surfaces. On a small or low-risk diff, skip the separate
    pass: the native review's cleanup angles already surface reuse /
    simplification / efficiency / altitude findings — apply the worthwhile
-   ones and record `simplify: folded-into-review`. Light always folds it in
-   — on Claude Code, into the quality reviewer.
+   ones and record `simplify: folded-into-review`. Light always folds it in,
+   into the quality reviewer.
 
 **In light, scope and budget every reviewer subagent** — the three above and
 the fix-delta one below. Hand it the exact range and short notes — the
@@ -458,7 +488,7 @@ instead of exploring open-endedly. Those hunks go to a fresh reviewer with
 the same brief and budget — the lifecycle's waves — until every hunk has
 had a reader; the gate never passes on an unread hunk. The budget is the fixed
 deadline the [bounded lifecycle](../review-agent/references/lifecycle.md)
-requires of every wait: past it the driver sends one wrap-up message
+requires of every wait: past it the lane sends one wrap-up message
 (SendMessage), never a silent wait (observed: a fix-delta reviewer handed two
 implementation briefs, three review reports and the PR thread read whole
 files and traced code one command per turn: 183 turns, a ~485k-token context,
@@ -474,8 +504,8 @@ unverified candidates — reconcile them yourself against the code — record th
 native leg as `degraded: no verified report`, and re-run the skill once on the
 final range when the limit has reset instead of re-forking per fix round.
 
-If a named surface is not model-invocable in the current session, run that
-leg in its driver form (a spawned subagent or the driver's own pass over the
+If a named surface is not model-invocable in the lane's session, run that
+leg in the lane's own form (a spawned subagent or the lane's own pass over the
 exact diff) and record the substitution — availability never cancels a leg,
 and no leg satisfies another; only the weight and the sizing rule above may
 fold the simplification pass into the native review.
@@ -492,8 +522,7 @@ calling the gate.
 sound.** Reconcile every finding with concrete code evidence; fix actionable
 in-scope defects, then repeat only the affected checks. In light that is one
 fix-delta check once the fixes change behavior: commit the fixes, then a fresh
-reviewer subagent, scoped and budgeted as above (a Codex driver re-reads the
-delta itself), over
+reviewer subagent, scoped and budgeted as above, over
 `<reviewed-head>..HEAD` and the enclosing functions, given the verified list
 and the remit of `claude-stock-code-review`'s Phase 3 — what the fixes broke
 or missed, not re-confirmation — reporting every candidate on the same terms,
@@ -503,7 +532,7 @@ itself wrote since the reviewed head: its own commits
 merge made in between, that merge's conflict resolution alone
 (`git show --remerge-diff <merge>`) — never the base commits a merge or
 restack carried in, which `git diff <reviewed-head>..HEAD` would hand the
-reviewer as if they were fixes. The driver verifies what
+reviewer as if they were fixes. The lane verifies what
 they find; fixing it starts no further round, and those last fixes reach the
 Final Review as a range no first-order pass read.
 If a pass comes back `blocked`, the two reviews
@@ -542,8 +571,8 @@ browser game, a desktop run says nothing about a mobile host). A browser or
 device executor that differs in mechanics still carries the same tiering, time
 budgets, and Reporting Contract.
 
-Delegate the live run to the chosen executor, **reproducing a clean-state
-scenario** so stale data cannot mask or fake a pass:
+The lane delegates the live run to the chosen executor, **reproducing a
+clean-state scenario** so stale data cannot mask or fake a pass:
 
 - Clear only the persisted state the profile lists as relevant to the changed
   area before the run (session/scenario/editor state, run artifacts), unless
@@ -594,7 +623,7 @@ coverage gaps and cannot be silently counted as automated passes.
 
 ### 5a — Platform host verification (conditional) — **Platform gate**
 
-Run this per scope, after the Live Test gate, **only when the change reaches a
+The driver runs this per scope, after every lane's Live Test gate, **only when the change reaches a
 platform host surface the project profile defines** (a mobile host, a handheld,
 a console target — each with its own compiler, sysroot, dependency root and
 GPU backend). The Live Test gate exercises the primary product; nothing it
@@ -633,7 +662,7 @@ decide and which must be driven from the main session.
 
 ### 5b — Performance capture (conditional) — **Performance gate**
 
-Run this per scope, after the Live Test gate and before the Final Review gate, **only when the change touches a
+The driver runs this per scope, after every lane's Live Test gate and before the Final Review gate, **only when the change touches a
 performance-critical surface** — anything on a per-frame, per-request or
 per-step hot path. The authoritative list lives in the project profile
 ("Conditional gates and consent") and the profiling skill it names.
@@ -658,18 +687,17 @@ make no measured performance claim without the captures.
 
 ### 6 — Final review & lint (whole scope) — **Final Review gate**
 
-Run this **once**, after **every** sub-task has passed its per-lane gates and before any PR is
+The driver runs this **once**, after **every** lane has reported its per-lane gates passed and before any PR is
 marked ready. It is the expensive pass, so it is deferred to the end and run over
 the **whole change scope** rather than per PR — and once per repository in a
 cross-repo scope.
 
-**Land the sub-task's commits before this pass.** `review-agent` resolves the
-committed `<base>...HEAD` scope by default, so any
-*uncommitted* edits (including fixes you just applied to satisfy Code Review) are silently
-reviewed as stale, pre-edit code and the whole run is wasted. Commit (or amend)
-each sub-task's work first, or name the `uncommitted` scope, so the pass
-actually sees the final integrated tree, not an old pre-fix snapshot or just
-the last commit.
+**Every lane's work is committed and reported before this pass.** `review-agent`
+resolves a committed range, and a lane's commits are on its branch in the
+shared repository, readable from the driver's worktree by ref; its uncommitted
+edits are not. A lane whose receipt is missing, or whose branch is behind what
+it reported, is not done: ask it to commit and report, never read its worktree
+for it.
 
 1. **Fidelity to the scope record.** Re-read the intake scope record and hold
    the delivered set against it: every promised outcome shipped or covered by
@@ -687,10 +715,13 @@ the last commit.
 3. **The `review-agent` pass** — the second-order layered, cross-validated
    review across the full scope: project-encoded, cross-cutting, and
    architectural risk on top of the first-order reviews the Code Review gate already ran per
-   step — the skill's default lens set assumes exactly that. Pass it the
-   scope, the weight, the first-order receipts with any ranges no first-order
-   pass read (fixes made after a lane's last review), the project profile,
-   and the outstanding limitations. Run it by
+   step — the skill's default lens set assumes exactly that. Pass it
+   every lane's base and branch — a lane's range is `<lane-base>...<lane-branch>`,
+   which the skill's scope helper resolves with `--head <lane-branch>`, and a
+   stacked chain's whole scope is `<base>...<top branch>` — each lane's
+   worktree path as read-only context, the weight, the first-order receipts
+   with any ranges no first-order pass read (fixes made after a lane's last
+   review), the project profile, and the outstanding limitations. Run it by
    spawning the **`review-orchestrator` subagent** with the scope (both
    runtimes ship the def; the skill's topology is its contract) —
    never through the Skill tool: `review-agent` is explicit-only
@@ -746,9 +777,10 @@ Decide:
 
 The draft PRs already exist from phase 2. Once **Code Review and Live Test pass for each PR, the
 whole-scope Final Review pass is clean, and Cross-Platform has passed or been recorded
-`not-applicable:` / `waived:`**, flip each out of draft via the
-**`github-create-pr` skill** — **the moment the gate set completes**, not in an
-end-of-run batch; a passed gate sitting in draft is pure latency.
+`not-applicable:` / `waived:`**, the driver flips each out of draft via the
+**`github-create-pr` skill** (`gh` needs no worktree) — **the moment the gate
+set completes**, not in an end-of-run batch; a passed gate sitting in draft is
+pure latency.
 
 **The readiness floor is unconditional; the profile defines what it is.**
 Before a PR flips ready, its **final commit state** must have passed the floor
@@ -761,7 +793,9 @@ recorded status, never a silently skipped floor. Earlier gate runs count
 only if no commit landed after them — a fix commit for Code Review, Final Review,
 or Cross-Platform findings that never
 re-built, re-booted, or re-ran checks is untested code about to land. The Live
-Test risk tier does not waive this floor.
+Test risk tier does not waive this floor. The lane runs the floor's checks in
+its worktree and its receipt names the head they passed on; the driver flips
+nothing it has not read there.
 
 **Never
 auto-merge**: readying PRs is the orchestrator's job, merging is the user's.
@@ -772,9 +806,10 @@ chain mechanics below. Confirm the body still reflects the whole branch, in the
 `github-create-pr` body shape, with `## Testing` naming the actual clean-state
 commands and verdict. When a
 stacked chain merges, retarget each downstream PR onto its new base **before**
-merging the one below it, then restack with a lease-guarded force-push (see
-github-create-pr "PR Chains"). Never merge a PR before retargeting the PR
-stacked above it.
+merging the one below it (the driver, with `gh`), then have its lane restack
+with a lease-guarded force-push and re-run its floor (see github-create-pr
+"PR Chains"), and wait for the lane's new head before merging the one below.
+Never merge a PR before retargeting the PR stacked above it.
 
 ## Gates summary
 
@@ -804,11 +839,26 @@ is a **scheduler**: it keeps lanes moving and evaluates gates. Any moment where
 the driver idles on a single background op while another lane has ready work is
 a scheduling bug.
 
-**The lane model.** After the Design gate, each independent sub-task is a lane:
-worktree + warm build → implement → Code Review → Live Test, advancing independently of the
-other lanes. Aim for **2–3 concurrent lanes** on a shared machine — CPU, the
-build cache, and product instances contend beyond that; further lanes queue behind
-the first free slot.
+**The lane model.** After the Design gate, each independent sub-task is a lane —
+a linked session in its own worktree: set up → implement → Code Review → Live
+Test — advancing on its own turns, independently of the other lanes and of
+the driver. Aim for **2–3 concurrent lanes** on a shared machine — CPU, the
+build cache, and product instances contend beyond that; further lanes are
+started with the rest and wait for `go` behind the first free slot.
+
+**The lane ledger.** The driver keeps, in working context and under the run's
+evidence path (`.local/orchestrate/<run>/lanes.md` by default), one row per
+lane: name, session, worktree path, base SHA, branch, PR, the last state line,
+and what the lane waits for. A lane's end-of-turn note reaches the driver only
+once every lane is quiet, so a lane that needs the driver before that
+messages it (SendMessage to `parent`), and the driver answers by the lane's
+name. Anything in a lane's worktree — a restack, a revert, a re-run — the
+driver asks of the lane by message and never does there.
+
+**Stopping.** The person's stop in the driver stops nothing in the lanes: list
+the linked sessions and stop each one (`list_sessions` with `linked`, then
+`stop_session`), and report what was stopped. At closure the lane sessions
+stay for the person to open; archive them only on the person's word.
 
 Machine-wide build resources are easy to forget: a build-cache writer lease or
 a dependency-root lock that two lanes of the **same** session contend for
@@ -825,11 +875,11 @@ Runs concurrently:
 
 - **Design validations** — one backgrounded cross-provider run per sub-task,
   launched as a single batch.
-- **Lanes** — independent sub-tasks in parallel worktrees, but only on
-  disjoint file sets; tell each writer which paths the others own.
+- **Lanes** — one linked session each, on disjoint file sets; every brief
+  names the paths the other lanes own.
 - **The review legs** — native review (in light, its three reviewers),
   cross-provider review, and the
-  simplification pass (when it runs) launch together per lane; reconcile
+  simplification pass (when it runs) launch together inside each lane; reconcile
   against the post-simplify diff at the gate.
 - **Live-test runs** — per-lane worktrees isolate managed instances by design
   where the profile says so (worktree-local registry, ephemeral ports,
@@ -858,9 +908,9 @@ Stays serial, deliberately:
   sub-tasks. Cross-Platform runs only
   when it applies (cross-platform risk *and* a reachable target).
 - **Landing mechanics** — retarget/restack/merge order for stacked chains.
-- **The driver's own verification** — re-running the named tests and reviewing
-  `git diff` before each commit stays with the driver; keep it targeted so the
-  driver never becomes the long pole.
+- **A lane's own verification** — re-running the named tests and reviewing
+  `git diff` before each commit stays with the lane; keep it targeted so no
+  lane becomes the long pole.
 
 Launch each background cross-provider run as one backgrounded call with its
 own output file and probe it through that counterpart skill's watcher rather
@@ -870,6 +920,8 @@ than polling blindly.
 
 Checkpoint and ask the user when:
 - the scope, owner, or "done" proof is ambiguous
+- a lane session cannot be started, ends a turn without its state line, stops
+  answering messages, or its worktree or branch is gone
 - the project profile names no provider model and the user has not chosen one
 - any gate fails or a review pass is `blocked`
 - a performance-critical surface was touched but a comparable before/after
@@ -888,12 +940,14 @@ Checkpoint and ask the user when:
 - the Final Review pass reports a cheap/fast tier, cannot identify the effective model, or returns `REVIEW INCOMPLETE`
 - the change has cross-platform risk you cannot verify (no reachable remote target) and the gap is not waived
 
-A gate failure or ambiguity stops **its lane, not the world**. Park the failed
-lane, bring every other lane to a running state (next background step
-launched), then ask. Stop all lanes only when the answer could invalidate them
-too — a scope-wide ambiguity, a shared-contract change, or a defect the other
-lanes build on. Batch every decision pending across lanes into that one
-checkpoint — one round-trip, not one ask per lane.
+A gate failure or ambiguity stops **its lane, not the world**, and is asked in
+the session that owns it: a lane posts the checkpoint in its own thread, where
+the person answers it, and tells the driver in one line; the driver never
+re-asks a lane's question, and the other lanes keep running. A decision that
+could invalidate other lanes too — a scope-wide ambiguity, a shared-contract
+change, a defect the other lanes build on — is the driver's: it tells those
+lanes to pause at their next commit, then asks. Batch every decision pending
+at the driver into that one checkpoint — one round-trip, not one ask per lane.
 
 Checkpoint shape:
 
@@ -910,6 +964,8 @@ Hard Stop
 
 Report the smallest honest summary:
 - the PRs opened (links), and how they stack on the base branch
+- the lane sessions, by name and link, each with its final state and whether
+  it still waits on the person
 - the scope-record verdict: each recorded outcome shipped / amended /
   descoped, naming the user decision behind every amendment
 - the weight the run used (`light` or `heavy`)
@@ -950,14 +1006,13 @@ subagent the path and let it read the file itself. Project skills the profile
 names live under `PROJECT_ROOT`.
 
 - PRs & chains: **`github-create-pr` skill**
-- cross-provider design validation / second review: **`codex` skill** from
-  Claude Code; **`claude` skill** from Codex
-- implementation: the driver or a worker available to that runtime, in an
-  isolated worktree
-- per-step native review / simplification: on Claude Code, three grouped
+- cross-provider design validation / second review: the **`codex` skill**
+- implementation: the lane session, itself or through a `codex` write
+  handoff, in its own worktree
+- per-step native review / simplification: in the lane — three grouped
   reviewer subagents in light, **`/claude-stock-code-review`**
   (copy of the stock `/code-review`) + **`/simplify`** sized to the diff in
-  heavy; driver review + driver simplification audit on Codex
+  heavy
 - final review & lint (whole scope, once): **`review-agent` skill** via its
   **`review-orchestrator`** subagent, given the weight
 - build / run / clean-state test: the executor the project profile names per
@@ -966,7 +1021,68 @@ names live under `PROJECT_ROOT`.
 - platform host build / launch / verification (Platform gate, conditional): the profile's host executor
 - performance before/after captures (Performance gate, conditional): the profile's profiling route and executor
 - bounded waits + cross-platform parity (Cross-Platform gate, conditional): the profile's cross-platform tooling
-- worktrees & env: the worktree guide the profile names
+- worktrees & env: the app cuts a lane's worktree; the lane provisions it per
+  the worktree guide the profile names
+
+## Lanes as sessions
+
+### The lane brief
+
+A lane starts with a fresh context and has seen nothing of this conversation,
+so the brief is its whole world. `prompt` is the brief; `background` is the
+scope record in a few lines (outcome, excluded, done proof, the other lanes).
+The brief, in this order:
+
+```md
+Lane brief
+- run: <the scope record's initial_ask in a line>; weight: <light|heavy>
+- lane: <name>; slice: <what this PR delivers, and why it is one PR>
+- base: <branch> at <sha>; PR target: <the base, or the predecessor lane's branch>
+- start: <now | wait for `go`>
+- design: <the validated design — owner/surface, files, contract delta, verification — with the counterpart's refinements folded in>
+- owned paths: <this lane's>; other lanes: <lane: paths>
+- done proof: <the tests to run, the Live Test tier with its reason and executor, the readiness floor>
+- codex: <model, effort and sandbox from the profile's Provider policy; `--network` when the tests need it>
+- driver: <this session's name; its PROJECT_ROOT, for the run's evidence paths>
+- rules: read `<SKILL_DIR>/SKILL.md`, "Running a lane", before anything else; then the profile, AGENTS.md and the laws from your own worktree
+```
+
+### Running a lane
+
+A lane is a full session, with the person, the tools and the project's
+instructions; this file is its contract. Its order:
+
+1. **Set up.** Provision the worktree the app cut, as the profile's worktree
+   guide says; write the brief's spec to your own
+   `.local/orchestrate/<lane>/task.md`; read the profile, `AGENTS.md` and the
+   laws the slice touches; record the base SHA. If the brief says wait, end
+   the turn on the state line `ready` and write no code until `go`.
+2. **Implement** per phase 3 — yourself, or through a `codex` write handoff
+   into this worktree — then run the named tests, review `git diff`, commit,
+   push, and open the draft PR against the brief's target (the
+   `github-create-pr` skill); the app's PR monitor follows this session.
+3. **Gates**: the Code Review gate per phase 4, the Live Test gate per phase
+   5, then the readiness floor the profile names, on the final head.
+4. **Report.** Every turn ends with one state line first, then the rest:
+   `<lane>: <phase> — <ran:|blocked:|degraded:|not-applicable:> …; head <sha>; PR <url|none>; waits for <nothing|person|driver|lane X>`.
+   The receipt lives at `.local/orchestrate/<lane>/receipt.md` in this
+   worktree, in the closure's tagged form, with the ranges no first-order
+   pass read and the Live Test record; the final report names its absolute
+   path.
+
+A lane never edits outside its worktree; never changes its slice — a scope
+question goes to the driver by message, and the lane parks; never merges,
+deploys or publishes; never starts sessions of its own; and never asks the
+person what the driver owns (scope, models, the merge). It does ask the person
+about its own gate failures, in the checkpoint shape, in its own thread, after
+telling the driver in one line.
+
+Messages it answers: `go` (start writing code); `pause` (finish the current
+step, commit nothing new, report); `restack onto <ref>` (rebase `--onto`,
+re-record the base, re-run the floor, force-push with lease, report the new
+head); `revert <path>` (to the base, per phase 3); `re-run <check>`; `stop`
+(end the turn where the tree stands, and say where that is). Marking the PR
+ready is the driver's, never the lane's.
 
 ## Self-Improvement Policy
 
