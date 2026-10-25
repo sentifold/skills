@@ -25,7 +25,9 @@ independent validation and review, through the installed `codex` skill.
 ## Runtime
 
 The driver needs the desktop app's session tools: the one that starts a
-linked session (`mcp__ccd_session__start_session`), messaging between
+linked session (`mcp__ccd_session__start_session`, with
+`mcp__ccd_session__list_start_targets` for the places it may start in),
+messaging between
 sessions (`SendMessage`, addressed by a lane's `name` or `parent`), and the
 listing and stopping of linked sessions (`mcp__ccd_session_mgmt__list_sessions`
 with `linked`, `mcp__ccd_session_mgmt__stop_session`). Check they are exposed
@@ -308,7 +310,11 @@ before any further edit or commit. A clean result passes the Design gate as
 exception makes an already-started task usable without falsifying gate order.
 
 A lane is never started before its design passes; its brief carries the
-design as validated, refinements folded in.
+design as validated, refinements folded in. Adopted work reaches its lane as
+commits: the driver commits the existing diff on its own branch (a WIP commit
+the lane may rewrite), the lane is cut from that branch with the original
+base recorded as its base, and the driver writes no more into it; work that
+cannot be committed stops the run before any lane starts.
 
 ### 2 — Slice into right-sized draft PRs
 
@@ -392,13 +398,18 @@ runtime's agent listing (`ListAgents`) and the app's session list are cheap; an 
 scope question, found late it is a restack.
 
 **Start lanes in turns the person began, within the cap.** A start is refused
-in a turn that another session's message or an automated event began, so
-lanes start in the turn in which their Design validations return, or in the
-one after a Hard Stop's answer — every lane of the scope at once, the ones
-beyond the concurrent-lane cap too. A lane within the cap starts at once; a
-lane beyond it sets up its worktree and the warm build the profile names,
-reports `ready` and writes no code until the driver's `go` (SendMessage, by
-the lane's name), sent as a slot frees. Nothing is lost in the wait: the brief
+in a turn that another session's message or an automated event began — a
+background validation's completion notification begins such a turn — so the
+driver watches its Design validations inside the person's turn, in the
+bounded watcher calls the counterpart skill gives it, and starts the lanes in
+that same turn, or in the one after a Hard Stop's answer: every lane of the
+scope at once, the ones beyond the concurrent-lane cap too. A lane within the
+cap whose base already holds what it builds on starts at once. Every other
+lane provisions its worktree, reports `ready` and parks: its warm build, its
+tests and its code wait for the driver's `go` (SendMessage, by the lane's
+name), sent as a slot frees — and to a lane stacked on another lane, sent
+only once the predecessor's branch holds the implementation the design names,
+with `restack onto <that head>` first. Nothing is lost in the wait: the brief
 already carries the design as validated.
 
 The lane may implement directly or hand the work to a `codex` write run into
@@ -721,18 +732,20 @@ for it.
    stacked chain's whole scope is `<base>...<top branch>` — each lane's
    worktree path as read-only context, the weight, the first-order receipts
    with any ranges no first-order pass read (fixes made after a lane's last
-   review), the project profile, and the outstanding limitations. Run it by
+   review), the project profile, and the outstanding limitations. For
+   independent lanes the scope is the set of their ranges, the deterministic
+   checks of each lane's snapshot are those its receipt holds for the reviewed
+   head, and the report states coverage per lane. Run it by
    spawning the **`review-orchestrator` subagent** with the scope (both
    runtimes ship the def; the skill's topology is its contract) —
    never through the Skill tool: `review-agent` is explicit-only
    (`disable-model-invocation`), skill authorization does not chain, and the
    Skill call is refused by design. The checkpoint above already carries the
    user's consent, so the refusal is expected — neither a blocker nor a stop-and-ask.
-   Note that the subagent runs in the session's own worktree, so a report
-   write into a *different* reviewed worktree is refused by the Write tool;
-   hand it the reviewed worktree path and expect the report copied in via
-   Bash (or written under the session worktree, at the location the profile
-   names) rather than treating the refusal as a failed pass.
+   The subagent runs in the driver's worktree and writes its report there,
+   under the run's evidence path; the lane worktrees it is handed are read,
+   never written — a refused write into one of them is the wrong location,
+   not a failed pass.
    Follow the skill's capability-based topology and
    [bounded lifecycle](../review-agent/references/lifecycle.md): the parent
    owns completion, child handles and results are tracked, and in heavy a
@@ -806,10 +819,11 @@ chain mechanics below. Confirm the body still reflects the whole branch, in the
 `github-create-pr` body shape, with `## Testing` naming the actual clean-state
 commands and verdict. When a
 stacked chain merges, retarget each downstream PR onto its new base **before**
-merging the one below it (the driver, with `gh`), then have its lane restack
-with a lease-guarded force-push and re-run its floor (see github-create-pr
-"PR Chains"), and wait for the lane's new head before merging the one below.
-Never merge a PR before retargeting the PR stacked above it.
+merging the one below it (the driver, with `gh`); once that merge has landed,
+have the downstream lane restack onto the updated base with a lease-guarded
+force-push and re-run its floor (see github-create-pr "PR Chains"), and merge
+it only on that new head. Never merge a PR before retargeting the PR stacked
+above it.
 
 ## Gates summary
 
@@ -850,9 +864,10 @@ started with the rest and wait for `go` behind the first free slot.
 evidence path (`.local/orchestrate/<run>/lanes.md` by default), one row per
 lane: name, session, worktree path, base SHA, branch, PR, the last state line,
 and what the lane waits for. A lane's end-of-turn note reaches the driver only
-once every lane is quiet, so a lane that needs the driver before that
-messages it (SendMessage to `parent`), and the driver answers by the lane's
-name. Anything in a lane's worktree — a restack, a revert, a re-run — the
+once every lane is quiet, so a lane sends its state line to the driver itself
+(SendMessage to `parent`) at the end of every turn — a freed slot, a question
+or a finished lane must not wait for the others — and the driver answers by
+the lane's name. Anything in a lane's worktree — a restack, a revert, a re-run — the
 driver asks of the lane by message and never does there.
 
 **Stopping.** The person's stop in the driver stops nothing in the lanes: list
@@ -945,9 +960,12 @@ the session that owns it: a lane posts the checkpoint in its own thread, where
 the person answers it, and tells the driver in one line; the driver never
 re-asks a lane's question, and the other lanes keep running. A decision that
 could invalidate other lanes too — a scope-wide ambiguity, a shared-contract
-change, a defect the other lanes build on — is the driver's: it tells those
-lanes to pause at their next commit, then asks. Batch every decision pending
-at the driver into that one checkpoint — one round-trip, not one ask per lane.
+change, a defect the other lanes build on — is the driver's: it halts the
+lanes whose work in flight the answer could invalidate (`stop_session`; a
+message reaches a busy lane only when its turn ends), sends `pause` to the
+rest and waits for their `paused` state lines, then asks. Batch every
+decision pending at the driver into that one checkpoint — one round-trip, not
+one ask per lane.
 
 Checkpoint shape:
 
@@ -1063,7 +1081,8 @@ instructions; this file is its contract. Its order:
    `github-create-pr` skill); the app's PR monitor follows this session.
 3. **Gates**: the Code Review gate per phase 4, the Live Test gate per phase
    5, then the readiness floor the profile names, on the final head.
-4. **Report.** Every turn ends with one state line first, then the rest:
+4. **Report.** Every turn ends with one state line first, then the rest,
+   and the same state line goes to `parent` by message:
    `<lane>: <phase> — <ran:|blocked:|degraded:|not-applicable:> …; head <sha>; PR <url|none>; waits for <nothing|person|driver|lane X>`.
    The receipt lives at `.local/orchestrate/<lane>/receipt.md` in this
    worktree, in the closure's tagged form, with the ranges no first-order
@@ -1077,8 +1096,10 @@ person what the driver owns (scope, models, the merge). It does ask the person
 about its own gate failures, in the checkpoint shape, in its own thread, after
 telling the driver in one line.
 
-Messages it answers: `go` (start writing code); `pause` (finish the current
-step, commit nothing new, report); `restack onto <ref>` (rebase `--onto`,
+Messages it answers: `go` (start the warm build, then the code; when it
+names a head, restack onto it first); `pause` (finish the step in flight,
+commit nothing new, report the state line `paused`, wait for `go`);
+`restack onto <ref>` (rebase `--onto`,
 re-record the base, re-run the floor, force-push with lease, report the new
 head); `revert <path>` (to the base, per phase 3); `re-run <check>`; `stop`
 (end the turn where the tree stands, and say where that is). Marking the PR
