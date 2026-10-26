@@ -265,9 +265,11 @@ from the prompt alone — exit 0, a fluent verdict, no file citations. See the
 codex skill's `references/runtime-findings.md` (bubblewrap silent-success
 trap). Detect it before the leg with `bwrap --dev-bind / / --unshare-net true`
 and after it, on a Linux host only, by grepping the run's
-`provider.stdout`/`provider.stderr` for the kernel's own line,
-`bwrap: loopback: Failed RTM_NEWADDR` — a bare `bwrap:` also matches this
-file whenever the run reads it. On such a host run the Codex leg with `--sandbox danger-full-access`
+`provider.stdout`/`provider.stderr` for lines that begin with `bwrap: `
+(`^bwrap: `, the sandbox's own diagnostics, whatever follows the prefix) and
+confirming in the transcript that the run's commands failed — a quotation of
+the word inside a line is this file or the codex skill's notes, which the run
+read. On such a host run the Codex leg with `--sandbox danger-full-access`
 **only if** the target profile's `## Provider policy` declares
 `Codex sandbox: danger-full-access (bubblewrap denied)` or the user says so for
 this run; put a HARD CONSTRAINT line in the prompt ("read-only reviewer — no

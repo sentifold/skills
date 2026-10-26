@@ -388,9 +388,12 @@ base gains fix commits with `--onto`, then re-verify and
 After a squash or rewritten parent, verify that the child diff contains only
 its own work; never force-push unrelated user work. A lane restacks its own
 branch; the driver asks for it by message and waits for the new head. A lane
-stacked on another restacks twice at most: at `go`, onto the predecessor's
-implementation head, and once the predecessor's gates close, onto its final
-head; it does not follow every commit in between.
+stacked on another does not follow its predecessor commit by commit: it
+restacks at `go`, onto the predecessor's implementation head; when the
+predecessor's per-lane gates close, onto that head; and after that only when
+a Final Review fix or a merge below moves its base. A restack rewrites the
+reviewed head: the lane records which new commit it became, and the fix-delta
+range starts there.
 
 **One session, one worktree.** The driver never writes into a lane's worktree
 and never runs git there; a lane never writes into another lane's or the
@@ -879,11 +882,12 @@ lane: name, session, worktree path, base SHA, branch, PR, the last state line,
 and what the lane waits for. A lane's end-of-turn note reaches the driver only
 once every lane is quiet, so a lane sends its state line to the driver itself
 (SendMessage to the driver's session id, which its brief carries) whenever
-its phase or status changed, it now waits for something, or it is done — a
-freed slot, a question or a finished lane must not wait for the others; a
-turn that changed nothing sends none, the app's note is enough, and every
-message starts a turn of the driver's — and the driver answers by the lane's
-session id. Anything in a lane's worktree — a restack, a revert, a re-run — the
+anything the ledger holds changed — its phase or status, its head or base,
+its PR, what it waits for — or a request of the driver's is done; a freed
+slot, a new head or a finished lane must not wait for the others; a turn that
+changed none of that sends none, the app's note is enough, and every message
+starts a turn of the driver's — and the driver answers by the lane's session
+id. Anything in a lane's worktree — a restack, a revert, a re-run — the
 driver asks of the lane by message and never does there.
 
 **Stopping.** The person's stop in the driver stops nothing in the lanes: list
@@ -1077,7 +1081,7 @@ Lane brief
 - owned paths: <this lane's>; other lanes: <lane: paths>
 - done proof: <the tests to run, the Live Test tier with its reason and executor, the readiness floor>
 - codex: <model, effort and sandbox from the profile's Provider policy; `--network` when the tests need it>
-- driver: <this session's id (`get_session` with `self`), where every state line goes; its PROJECT_ROOT, for the run's evidence paths>
+- driver: <this session's id (`get_session` with `self`), where every changed state line goes; its PROJECT_ROOT, for the run's evidence paths>
 - rules: read `<SKILL_DIR>/SKILL.md`, "Running a lane", before anything else; then the profile, AGENTS.md and the laws from your own worktree
 ```
 
@@ -1098,9 +1102,10 @@ instructions; this file is its contract. Its order:
 3. **Gates**: the Code Review gate per phase 4, the Live Test gate per phase
    5, then the readiness floor the profile names, on the final head.
 4. **Report.** Every turn ends with one state line first, then the rest;
-   the same state line goes to the driver's session id by message when its
-   phase or status changed, when the lane now waits for something, or when it
-   is done, and otherwise not at all:
+   the same state line goes to the driver's session id by message when
+   anything in it changed since the last one sent — phase, status, head, PR,
+   what it waits for — or a request of the driver's is done, and otherwise
+   not at all:
    `<lane>: <phase> — <ran:|blocked:|degraded:|not-applicable:> …; head <sha>; PR <url|none>; waits for <nothing|person|driver|lane X>`.
    The receipt lives at `.local/orchestrate/<lane>/receipt.md` in this
    worktree, in the closure's tagged form, with the ranges no first-order
