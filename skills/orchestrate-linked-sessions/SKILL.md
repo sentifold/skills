@@ -28,7 +28,9 @@ The driver needs the desktop app's session tools: the one that starts a
 linked session (`mcp__ccd_session__start_session`, with
 `mcp__ccd_session__list_start_targets` for the places it may start in),
 messaging between
-sessions (`SendMessage`, addressed by a lane's `name` or `parent`), and the
+sessions (`SendMessage`, addressed by a session's `local_…` id: a lane's from
+`start_session`'s result, the driver's own from `get_session` with `self`; a
+lane's `name` is not an address, and a send to it is refused), and the
 listing and stopping of linked sessions (`mcp__ccd_session_mgmt__list_sessions`
 with `linked`, `mcp__ccd_session_mgmt__stop_session`). Check they are exposed
 before intake. Where they are not — the terminal, VS Code, Codex — stop and
@@ -407,7 +409,7 @@ scope at once, the ones beyond the concurrent-lane cap too. A lane within the
 cap whose base already holds what it builds on starts at once. Every other
 lane provisions its worktree, reports `ready` and parks: its warm build, its
 tests and its code wait for the driver's `go` (SendMessage, by the lane's
-name), sent as a slot frees — and to a lane stacked on another lane, sent
+session id), sent as a slot frees — and to a lane stacked on another lane, sent
 only once the predecessor's branch holds the implementation the design names,
 with `restack onto <that head>` first. Nothing is lost in the wait: the brief
 already carries the design as validated.
@@ -708,7 +710,10 @@ resolves a committed range, and a lane's commits are on its branch in the
 shared repository, readable from the driver's worktree by ref; its uncommitted
 edits are not. A lane whose receipt is missing, or whose branch is behind what
 it reported, is not done: ask it to commit and report, never read its worktree
-for it.
+for it. A lane whose code is final and whose only open item waits on the
+person — a sign-in only they may approve, a device, a decision — counts as
+reported: name that item in the pass's scope, and flip its PR ready once the
+person acts, with no new pass unless its code changes.
 
 1. **Fidelity to the scope record.** Re-read the intake scope record and hold
    the delivered set against it: every promised outcome shipped or covered by
@@ -865,9 +870,9 @@ evidence path (`.local/orchestrate/<run>/lanes.md` by default), one row per
 lane: name, session, worktree path, base SHA, branch, PR, the last state line,
 and what the lane waits for. A lane's end-of-turn note reaches the driver only
 once every lane is quiet, so a lane sends its state line to the driver itself
-(SendMessage to `parent`) at the end of every turn — a freed slot, a question
-or a finished lane must not wait for the others — and the driver answers by
-the lane's name. Anything in a lane's worktree — a restack, a revert, a re-run — the
+(SendMessage to the driver's session id, which its brief carries) at the end
+of every turn — a freed slot, a question or a finished lane must not wait for
+the others — and the driver answers by the lane's session id. Anything in a lane's worktree — a restack, a revert, a re-run — the
 driver asks of the lane by message and never does there.
 
 **Stopping.** The person's stop in the driver stops nothing in the lanes: list
@@ -1061,7 +1066,7 @@ Lane brief
 - owned paths: <this lane's>; other lanes: <lane: paths>
 - done proof: <the tests to run, the Live Test tier with its reason and executor, the readiness floor>
 - codex: <model, effort and sandbox from the profile's Provider policy; `--network` when the tests need it>
-- driver: <this session's name; its PROJECT_ROOT, for the run's evidence paths>
+- driver: <this session's id (`get_session` with `self`), where every state line goes; its PROJECT_ROOT, for the run's evidence paths>
 - rules: read `<SKILL_DIR>/SKILL.md`, "Running a lane", before anything else; then the profile, AGENTS.md and the laws from your own worktree
 ```
 
@@ -1082,7 +1087,7 @@ instructions; this file is its contract. Its order:
 3. **Gates**: the Code Review gate per phase 4, the Live Test gate per phase
    5, then the readiness floor the profile names, on the final head.
 4. **Report.** Every turn ends with one state line first, then the rest,
-   and the same state line goes to `parent` by message:
+   and the same state line goes to the driver's session id by message:
    `<lane>: <phase> — <ran:|blocked:|degraded:|not-applicable:> …; head <sha>; PR <url|none>; waits for <nothing|person|driver|lane X>`.
    The receipt lives at `.local/orchestrate/<lane>/receipt.md` in this
    worktree, in the closure's tagged form, with the ranges no first-order
