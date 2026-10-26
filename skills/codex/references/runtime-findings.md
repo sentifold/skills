@@ -174,8 +174,13 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   `--sandbox danger-full-access` — which such a host's own `~/.codex/config.toml` may already
   declare as its `sandbox_mode` — put an explicit read-only instruction in the prompt for an
   analysis run, and confirm afterwards with `git status --porcelain` that nothing was
-  written. Grep any finished run's `<run>/provider.stdout` and `<run>/provider.stderr`
-  (paths in the receipt) for `bwrap:` before trusting a word of it.
+  written. On a Linux host, grep any finished run's `<run>/provider.stdout` and
+  `<run>/provider.stderr` (paths in the receipt) for lines that begin with
+  `bwrap: ` (`^bwrap: `, the sandbox's own diagnostics, whatever follows the
+  prefix) and confirm in the transcript that the run's commands failed, before
+  trusting a word of it. A match inside a line is no evidence: this note and
+  the review-agent skill quote the word, and a run that reads them echoes it
+  (observed on macOS, whose sandbox is not bubblewrap at all).
 - **Git worktrees: Codex cannot run git AT ALL under `workspace-write` (verified
   2026-07-28).** A linked worktree's git metadata lives in the MAIN clone
   (`<main>/.git/worktrees/<name>/index.lock`, plus shared `objects`/`refs`) —
@@ -289,7 +294,7 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
 - [ ] Default to `--sandbox read-only`; only `workspace-write --cd <repo>` when edits are required.
 - [ ] Task needs downloads / `git fetch` / any network? Add `--network` (workspace-write denies it by default).
 - [ ] Web search is ON by default so verify/second-opinion runs can cite public facts; pass `--no-search` only for a deliberately hermetic/offline run. (`--search`/`--network` are unrelated — provider tool vs local sandbox net.)
-- [ ] Linux host? Grep the finished run's `provider.stdout`/`provider.stderr` for `bwrap:` before trusting a verdict that cites no file.
+- [ ] Linux host? Grep the finished run's `provider.stdout`/`provider.stderr` for lines beginning `bwrap: ` and confirm its commands failed before trusting a verdict that cites no file. Elsewhere skip the grep: a quoted `bwrap:` inside a line is skill text the run read.
 - [ ] Write-mode spec: surgical edits, DO NOT commit, run named tests, print summary; then re-verify and commit yourself.
 - [ ] Bulk → batch in parallel; never one run over dozens of items. Parallel write sessions only on disjoint file sets.
 - [ ] Structured output via markers in the final message; single-run prose verdict via `--out <file>`. Never a file at an arbitrary absolute path.
