@@ -264,8 +264,10 @@ bubblewrap sandbox kills every command before it runs, and the model answers
 from the prompt alone — exit 0, a fluent verdict, no file citations. See the
 codex skill's `references/runtime-findings.md` (bubblewrap silent-success
 trap). Detect it before the leg with `bwrap --dev-bind / / --unshare-net true`
-and after it by grepping the run's `provider.stdout`/`provider.stderr` for
-`bwrap:`. On such a host run the Codex leg with `--sandbox danger-full-access`
+and after it, on a Linux host only, by grepping the run's
+`provider.stdout`/`provider.stderr` for the kernel's own line,
+`bwrap: loopback: Failed RTM_NEWADDR` — a bare `bwrap:` also matches this
+file whenever the run reads it. On such a host run the Codex leg with `--sandbox danger-full-access`
 **only if** the target profile's `## Provider policy` declares
 `Codex sandbox: danger-full-access (bubblewrap denied)` or the user says so for
 this run; put a HARD CONSTRAINT line in the prompt ("read-only reviewer — no
@@ -402,8 +404,10 @@ and counts only when independent native reviewers were not a project
 requirement.
 
 Include: repository and exact scope (commit IDs, digest); system model;
-selected/skipped lenses and why; check results; each leg's status and effective
-model/effort when known; findings with file:line, evidence, concrete failure,
+selected/skipped lenses and why; check results; each leg's status and the
+model and effort it actually ran on, as the runtime reports them — an
+inherited value is named as inherited, never as what the profile names;
+findings with file:line, evidence, concrete failure,
 severity and fix; coverage limits, outstanding children and their disposition;
 any local artifact path. A plan, progress note, notification, or empty provider
 output cannot satisfy this contract.
