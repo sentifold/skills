@@ -22,6 +22,12 @@ own worktree, that implements, reviews and tests its slice and reports back;
 its reviewers and executors are its subagents. Codex is the other engine for
 independent validation and review, through the installed `codex` skill.
 
+**What this file optimizes.** Time to a landed, verified PR at constant
+rigor, and the return on every token spent: a token goes where it buys
+proof, speed or an unbiased read, and is never saved by stopping, throttling
+or thinning a gate. The file itself stays small: a rule enters it only when it
+removes friction a run actually met, and names that friction.
+
 ## Runtime
 
 The driver needs the desktop app's session tools: the one that starts a
@@ -1149,7 +1155,14 @@ each re-reading ~600k tokens a turn). The output of a Codex run, a test, a
 build, a release or `verify-local` goes to a file under
 `.local/orchestrate/<lane>/` and is read by line range, or by a subagent that
 returns the lines that matter; several checks run in one command; a whole
-source file or log never goes into the conversation.
+source file or log never goes into the conversation. The long hands-on jobs
+leave the lane's own transcript altogether: a live test driven through a
+browser or a scripted call, a log or test run read for its verdict, a Codex
+run watched to its end go to a subagent that returns the receipt lines (the
+Agent tool; a subagent keeps the browser and shell tools), and the lane's own
+turns are for decisions, the verification of review candidates, commits and
+reports (observed: lanes that drove their live tests themselves ran to a
+thousand turns, their reviewers' candidates buried among browser probes).
 
 A lane never edits outside its worktree; never changes its slice — a scope
 question goes to the driver by message, and the lane parks; never merges,
