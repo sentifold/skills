@@ -50,7 +50,9 @@ so lanes start only in turns the person began.
 drives this scope and no other: the run ends at closure, and a follow-up, a
 new scope or a redesign the person asks for afterwards is a new invocation in
 a new session, given the previous run's notes ref and its open PRs as input;
-the old run's lanes stay reachable by id for a restack. A scope change inside
+the old run's lanes stay reachable by id for a restack, and such a request
+names the new driver's session id as the address of the lane's state lines
+from then on, the lane entering the new ledger. A scope change inside
 the run is an amendment to the scope record, as the loop says. Starting
 another scope's lanes from a closed run's driver mixes two families in the
 sidebar and keeps every lane's traffic in one context (observed: one driver
@@ -911,17 +913,28 @@ driver asks of the lane by message and never does there.
 **Evidence outlives the worktree.** The app hands an archived session's
 worktree folder to a new session, so `.local/` is scratch and a path into it
 is not a record (observed: two later lanes landed in the folders of two
-closed ones, whose receipts the PR bodies still pointed at). Two durable
-copies: a lane posts its receipt as a comment on its PR at closure and names
-that comment in its final state line; the driver pushes the run's folder —
-the scope record, the design and its validations, the lane briefs, the
-ledger, the Final Review report, the closure — to `refs/orchestrate/<run>/notes`
-in the repository, as a commit of that folder alone (`git add -f` into a
-temporary `GIT_INDEX_FILE`, `write-tree`, `commit-tree` on the ref's previous
-commit when there is one, `push origin <sha>:refs/orchestrate/<run>/notes`),
-when the Design gate passes, at each lane's closure and at the run's closure;
-every PR body links the ref. The profile may name another durable place; a
-worktree is never one.
+closed ones, whose receipts the PR bodies still pointed at). A receipt is
+therefore self-contained: the decisive lines of a log, a measurement, a
+verdict are quoted in it, and what it must link lives in a durable place — a
+PR, a ref — never under a worktree path. Two durable copies: a lane posts its
+receipt as a comment on its PR at closure and names that comment in its final
+state line (a lane that closed before it had a PR sends the receipt in that
+message instead); the driver pushes the run's folder — the scope record, the
+design and its validations, the lane briefs, the ledger, every lane's
+receipt, the Final Review report, the closure — to
+`refs/orchestrate/<run>/notes` in the repository, as a commit of that folder
+alone: fetch the ref first (`git fetch origin
++refs/orchestrate/<run>/notes:refs/orchestrate/<run>/notes`, which fails
+harmlessly before the first push), `git add -f` the folder into a temporary
+`GIT_INDEX_FILE`, `write-tree`, `commit-tree` with the fetched tip as the
+parent when there is one, `update-ref` the local ref, `push origin
+refs/orchestrate/<run>/notes` (a fast-forward: a rejected push means a newer
+tip to fetch and build on, never a force) — when the Design gate passes, at
+each lane's closure and at the run's closure; every PR body links the ref. A
+run whose driver is gone resumes in a new driver session from the ref and
+the PRs. The profile may name another durable place; a repository with no
+remote keeps the ref locally and the closure says so; a worktree is never
+one.
 
 **Stopping.** The person's stop in the driver stops nothing in the lanes: list
 the linked sessions and stop each one (`list_sessions` with `linked`, then
@@ -1144,9 +1157,11 @@ instructions; this file is its contract. Its order:
    `<lane>: <phase> — <ran:|blocked:|degraded:|not-applicable:> …; head <sha>; PR <url|none>; waits for <nothing|person|driver|lane X>`.
    The receipt lives at `.local/orchestrate/<lane>/receipt.md` in this
    worktree, in the closure's tagged form, with the ranges no first-order
-   pass read and the Live Test record; at closure the lane posts it as a
+   pass read and the Live Test record, self-contained: the decisive lines
+   quoted, links only to durable places. At closure the lane posts it as a
    comment on its PR (`gh pr comment`) and its final state line names that
-   comment, because the worktree folder is not kept for it (see
+   comment, or carries the receipt itself when the lane has no PR, because
+   the worktree folder is not kept for it (see
    [Evidence outlives the worktree](#parallelization)).
 
 **Keep the context lean.** A lane runs for hours and pays for its whole
