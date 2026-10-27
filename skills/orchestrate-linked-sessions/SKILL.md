@@ -22,6 +22,12 @@ own worktree, that implements, reviews and tests its slice and reports back;
 its reviewers and executors are its subagents. Codex is the other engine for
 independent validation and review, through the installed `codex` skill.
 
+**What this file optimizes.** Time to a landed, verified PR at constant
+rigor, and the return on every token spent: a token goes where it buys
+proof, speed or an unbiased read, and is never saved by stopping, throttling
+or thinning a gate. The file itself stays small: a rule enters it only when it
+removes friction a run actually met, and names that friction.
+
 ## Runtime
 
 The driver needs the desktop app's session tools: the one that starts a
@@ -39,6 +45,19 @@ lanes itself; this skill never falls back to that shape on its own, because a
 run that mixed the two could not say which session owns a lane. A start is
 refused in a turn that another session's message or an automated event began,
 so lanes start only in turns the person began.
+
+**One scope per driver session.** The session the person invoked the skill in
+drives this scope and no other: the run ends at closure, and a follow-up, a
+new scope or a redesign the person asks for afterwards is a new invocation in
+a new session, given the previous run's notes ref and its open PRs as input;
+the old run's lanes stay reachable by id for a restack, and such a request
+names the new driver's session id as the address of the lane's state lines
+from then on, the lane entering the new ledger. A scope change inside
+the run is an amendment to the scope record, as the loop says. Starting
+another scope's lanes from a closed run's driver mixes two families in the
+sidebar and keeps every lane's traffic in one context (observed: one driver
+carried a scope, its redesign and three follow-ups for 38 hours and 1,300
+turns, through a compaction).
 
 ## Roots and the project profile
 
@@ -365,10 +384,11 @@ hand-seeding files; the profile points at the project's worktree guide.
 
 **The brief is the lane's whole world.** A fresh session has seen nothing of
 this conversation: the `prompt` carries [the lane brief](#the-lane-brief)
-below and `background` the scope in a few lines. Keep the same text under the
-run's evidence path (`.local/orchestrate/<run>/lanes/<lane>/task.md` by
-default): the Final Review reads it, and a lane whose session is lost is
-restarted from it.
+below and `background` the scope in a few lines. Keep the same text in the
+run's folder (`.local/orchestrate/<run>/lanes/<lane>/task.md`, pushed to the
+run's notes ref — see [Evidence outlives the worktree](#parallelization)):
+the Final Review reads it, and a lane whose session is lost is restarted from
+it.
 
 **Reverting one file in a lane means checking it out from the lane's base, not from HEAD.**
 `git checkout -- <file>` restores the index/HEAD version, which already contains the
@@ -890,6 +910,32 @@ starts a turn of the driver's — and the driver answers by the lane's session
 id. Anything in a lane's worktree — a restack, a revert, a re-run — the
 driver asks of the lane by message and never does there.
 
+**Evidence outlives the worktree.** The app hands an archived session's
+worktree folder to a new session, so `.local/` is scratch and a path into it
+is not a record (observed: two later lanes landed in the folders of two
+closed ones, whose receipts the PR bodies still pointed at). A receipt is
+therefore self-contained: the decisive lines of a log, a measurement, a
+verdict are quoted in it, and what it must link lives in a durable place — a
+PR, a ref — never under a worktree path. Two durable copies: a lane posts its
+receipt as a comment on its PR at closure and names that comment in its final
+state line (a lane that closed before it had a PR sends the receipt in that
+message instead); the driver pushes the run's folder — the scope record, the
+design and its validations, the lane briefs, the ledger, every lane's
+receipt, the Final Review report, the closure — to
+`refs/orchestrate/<run>/notes` in the repository, as a commit of that folder
+alone: fetch the ref first (`git fetch origin
++refs/orchestrate/<run>/notes:refs/orchestrate/<run>/notes`, which fails
+harmlessly before the first push), `git add -f` the folder into a temporary
+`GIT_INDEX_FILE`, `write-tree`, `commit-tree` with the fetched tip as the
+parent when there is one, `update-ref` the local ref, `push origin
+refs/orchestrate/<run>/notes` (a fast-forward: a rejected push means a newer
+tip to fetch and build on, never a force) — when the Design gate passes, at
+each lane's closure and at the run's closure; every PR body links the ref. A
+run whose driver is gone resumes in a new driver session from the ref and
+the PRs. The profile may name another durable place; a repository with no
+remote keeps the ref locally and the closure says so; a worktree is never
+one.
+
 **Stopping.** The person's stop in the driver stops nothing in the lanes: list
 the linked sessions and stop each one (`list_sessions` with `linked`, then
 `stop_session`), and report what was stopped. At closure the lane sessions
@@ -1002,6 +1048,8 @@ Hard Stop
 
 Report the smallest honest summary:
 - the PRs opened (links), and how they stack on the base branch
+- the run's notes ref (`refs/orchestrate/<run>/notes`) at its final commit,
+  and each lane's receipt comment
 - the lane sessions, by name and link, each with its final state and whether
   it still waits on the person
 - the scope-record verdict: each recorded outcome shipped / amended /
@@ -1109,8 +1157,12 @@ instructions; this file is its contract. Its order:
    `<lane>: <phase> — <ran:|blocked:|degraded:|not-applicable:> …; head <sha>; PR <url|none>; waits for <nothing|person|driver|lane X>`.
    The receipt lives at `.local/orchestrate/<lane>/receipt.md` in this
    worktree, in the closure's tagged form, with the ranges no first-order
-   pass read and the Live Test record; the final report names its absolute
-   path.
+   pass read and the Live Test record, self-contained: the decisive lines
+   quoted, links only to durable places. At closure the lane posts it as a
+   comment on its PR (`gh pr comment`) and its final state line names that
+   comment, or carries the receipt itself when the lane has no PR, because
+   the worktree folder is not kept for it (see
+   [Evidence outlives the worktree](#parallelization)).
 
 **Keep the context lean.** A lane runs for hours and pays for its whole
 context on every turn (observed on the first run: two lanes of ~800 turns
@@ -1118,7 +1170,14 @@ each re-reading ~600k tokens a turn). The output of a Codex run, a test, a
 build, a release or `verify-local` goes to a file under
 `.local/orchestrate/<lane>/` and is read by line range, or by a subagent that
 returns the lines that matter; several checks run in one command; a whole
-source file or log never goes into the conversation.
+source file or log never goes into the conversation. The long hands-on jobs
+leave the lane's own transcript altogether: a live test driven through a
+browser or a scripted call, a log or test run read for its verdict, a Codex
+run watched to its end go to a subagent that returns the receipt lines (the
+Agent tool; a subagent keeps the browser and shell tools), and the lane's own
+turns are for decisions, the verification of review candidates, commits and
+reports (observed: lanes that drove their live tests themselves ran to a
+thousand turns, their reviewers' candidates buried among browser probes).
 
 A lane never edits outside its worktree; never changes its slice — a scope
 question goes to the driver by message, and the lane parks; never merges,
