@@ -185,6 +185,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
                             self.assertIn('--ephemeral', args)
                             self.assertEqual('model_reasoning_effort=xhigh' in args, bool(effort))
                             self.assertIn('mcp_servers.node_repl.enabled=false', args)
+                            self.assertIn(f"developer_instructions='{RUNTIME.AGENT_REQUEST}'", args)
                             self.assertIn('sandbox_workspace_write.network_access=false', args)
                             self.assertEqual(args[args.index('--sandbox') + 1], 'read-only')
                             for key in ('OPENAI_API_KEY', 'CODEX_API_KEY'):
@@ -193,6 +194,9 @@ class CrossProviderHelpersTests(unittest.TestCase):
                                 self.assertEqual(args[args.index('--cd') + 1], str(target))
                         else:
                             self.assertIn('--no-session-persistence', args)
+                            self.assertEqual(args[args.index('--append-system-prompt') + 1], RUNTIME.AGENT_REQUEST)
+                            style = Path(args[args.index('--settings') + 1])
+                            self.assertEqual(json.loads(style.read_text()), {'outputStyle': 'default'})
                             self.assertEqual('--effort' in args, bool(effort))
                             self.assertEqual(args[args.index('--permission-mode') + 1], 'dontAsk')
                             denied = args[args.index('--disallowedTools') + 1:args.index('--tools')]
