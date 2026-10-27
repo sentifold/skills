@@ -23,6 +23,10 @@ import uuid
 
 TERMINAL_STATUSES = frozenset(("DONE", "FAILED", "MISSING", "TIMEOUT", "CANCELLED", "CLEANUP_FAILED"))
 RUN_DIR_RETENTION_SECONDS = 7 * 86400
+# A helper run answers another agent, not a person: brevity styles meant for the
+# user (output styles, AGENTS.md answer rules) must not shorten that answer.
+AGENT_REQUEST = ("Request from another AI agent, not from the user: answer in full detail, "
+                 "in the language of the task, without any user-facing brevity or output style.")
 
 
 class RunError(Exception):
@@ -603,6 +607,8 @@ class Run:
                 argv += ["-c", "web_search='disabled'" if os.name == "nt" else 'web_search="disabled"']
             if not a.browser_mcp:
                 argv += ["-c", "mcp_servers.node_repl.enabled=false"]
+            # Overrides any inherited developer_instructions for this run only.
+            argv += ["-c", f"developer_instructions='{AGENT_REQUEST}'"]
             if a.json:
                 argv += ["--json"]
             if a.review:
@@ -635,12 +641,16 @@ class Run:
             config_path = self.root / "mcp-config.json"
             config_path.write_text(mcp_config, encoding="utf-8")
             mcp_config = str(config_path)
+        # The default style replaces a user-facing output style for this run only.
+        style_settings = self.root / "settings.json"
+        style_settings.write_text('{"outputStyle": "default"}', encoding="utf-8")
         argv = [cli, "-p", "--output-format", "json", "--no-session-persistence",
                 "--max-turns", str(a.max_turns), "--permission-mode",
                 "dontAsk" if a.mode == "read-only" else "acceptEdits",
                 "--allowedTools", *allowed, "--disallowedTools", *denied, "--tools", ",".join(tools),
                 "--disable-slash-commands", "--no-chrome", "--strict-mcp-config",
-                "--mcp-config", mcp_config, "--model", a.model]
+                "--mcp-config", mcp_config, "--settings", str(style_settings),
+                "--append-system-prompt", AGENT_REQUEST, "--model", a.model]
         if a.effort:
             argv += ["--effort", a.effort]
         if a.agent:
