@@ -40,6 +40,17 @@ run that mixed the two could not say which session owns a lane. A start is
 refused in a turn that another session's message or an automated event began,
 so lanes start only in turns the person began.
 
+**One scope per driver session.** The session the person invoked the skill in
+drives this scope and no other: the run ends at closure, and a follow-up, a
+new scope or a redesign the person asks for afterwards is a new invocation in
+a new session, given the previous run's notes ref and its open PRs as input;
+the old run's lanes stay reachable by id for a restack. A scope change inside
+the run is an amendment to the scope record, as the loop says. Starting
+another scope's lanes from a closed run's driver mixes two families in the
+sidebar and keeps every lane's traffic in one context (observed: one driver
+carried a scope, its redesign and three follow-ups for 38 hours and 1,300
+turns, through a compaction).
+
 ## Roots and the project profile
 
 `SKILL_DIR` is the real installed directory containing this file; `SKILLS_ROOT`
@@ -365,10 +376,11 @@ hand-seeding files; the profile points at the project's worktree guide.
 
 **The brief is the lane's whole world.** A fresh session has seen nothing of
 this conversation: the `prompt` carries [the lane brief](#the-lane-brief)
-below and `background` the scope in a few lines. Keep the same text under the
-run's evidence path (`.local/orchestrate/<run>/lanes/<lane>/task.md` by
-default): the Final Review reads it, and a lane whose session is lost is
-restarted from it.
+below and `background` the scope in a few lines. Keep the same text in the
+run's folder (`.local/orchestrate/<run>/lanes/<lane>/task.md`, pushed to the
+run's notes ref — see [Evidence outlives the worktree](#parallelization)):
+the Final Review reads it, and a lane whose session is lost is restarted from
+it.
 
 **Reverting one file in a lane means checking it out from the lane's base, not from HEAD.**
 `git checkout -- <file>` restores the index/HEAD version, which already contains the
@@ -890,6 +902,21 @@ starts a turn of the driver's — and the driver answers by the lane's session
 id. Anything in a lane's worktree — a restack, a revert, a re-run — the
 driver asks of the lane by message and never does there.
 
+**Evidence outlives the worktree.** The app hands an archived session's
+worktree folder to a new session, so `.local/` is scratch and a path into it
+is not a record (observed: two later lanes landed in the folders of two
+closed ones, whose receipts the PR bodies still pointed at). Two durable
+copies: a lane posts its receipt as a comment on its PR at closure and names
+that comment in its final state line; the driver pushes the run's folder —
+the scope record, the design and its validations, the lane briefs, the
+ledger, the Final Review report, the closure — to `refs/orchestrate/<run>/notes`
+in the repository, as a commit of that folder alone (`git add -f` into a
+temporary `GIT_INDEX_FILE`, `write-tree`, `commit-tree` on the ref's previous
+commit when there is one, `push origin <sha>:refs/orchestrate/<run>/notes`),
+when the Design gate passes, at each lane's closure and at the run's closure;
+every PR body links the ref. The profile may name another durable place; a
+worktree is never one.
+
 **Stopping.** The person's stop in the driver stops nothing in the lanes: list
 the linked sessions and stop each one (`list_sessions` with `linked`, then
 `stop_session`), and report what was stopped. At closure the lane sessions
@@ -1002,6 +1029,8 @@ Hard Stop
 
 Report the smallest honest summary:
 - the PRs opened (links), and how they stack on the base branch
+- the run's notes ref (`refs/orchestrate/<run>/notes`) at its final commit,
+  and each lane's receipt comment
 - the lane sessions, by name and link, each with its final state and whether
   it still waits on the person
 - the scope-record verdict: each recorded outcome shipped / amended /
@@ -1109,8 +1138,10 @@ instructions; this file is its contract. Its order:
    `<lane>: <phase> — <ran:|blocked:|degraded:|not-applicable:> …; head <sha>; PR <url|none>; waits for <nothing|person|driver|lane X>`.
    The receipt lives at `.local/orchestrate/<lane>/receipt.md` in this
    worktree, in the closure's tagged form, with the ranges no first-order
-   pass read and the Live Test record; the final report names its absolute
-   path.
+   pass read and the Live Test record; at closure the lane posts it as a
+   comment on its PR (`gh pr comment`) and its final state line names that
+   comment, because the worktree folder is not kept for it (see
+   [Evidence outlives the worktree](#parallelization)).
 
 **Keep the context lean.** A lane runs for hours and pays for its whole
 context on every turn (observed on the first run: two lanes of ~800 turns
