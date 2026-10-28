@@ -151,12 +151,16 @@ tasks follow the default "smallest direct change" behavior, not this ceremony.
   to native subagents that return compact results. Live app driving / UI
   verification → the tester executor the project profile names for the
   surface. Performance captures → the profiler executor the profile names.
-  Lanes and native children inherit the driver's model, effort and
-  permission mode — the person chose them for the session, and the review
-  runs on them; never start a lane or pin a delegated role on a weaker model
-  or lower effort merely to save tokens, and never pick a stronger one on
-  your own either. The profile's Claude leg is the cross-provider helper's
-  setting for a Codex driver, not these children's.
+  The driver and its children, the Final Review among them, run on the
+  model and effort the person chose for its session. A lane runs on
+  `claude-opus-5-5` at effort `medium` by default, and its children inherit
+  the lane's pair. The person may name another pair for a lane, at its start
+  or later: the driver passes it to `start_session`, or sets it with
+  `set_session_model` and `set_session_effort` on a running lane and for a
+  pair above its own, which `start_session` cannot start. Every session and
+  child inherits the person's permission mode. Never pin a delegated role to
+  another model or effort on your own. The profile's Claude leg is the
+  cross-provider helper's setting for a Codex driver, not these children's.
 - **Stop and ask whenever a decision is ambiguous or a gate fails.** A silent
   guess at a fork is worse than a one-line question. See [Stop conditions](#stop-conditions).
 - **Bounded waits only.** Never wait unbounded on a remote, a background Codex
@@ -375,8 +379,9 @@ Give each validated task **its own linked session** in **its own worktree**:
 the driver starts it — `start_session` with `initiation: user_asked` (the
 person's invocation and their answers at intake are the ask), `context:
 fresh`, `use_worktree: true`, `source_branch` the lane's base, `branch_name`
-the slice's slug, `name` a short lane handle, `wake_when_done: true`, and no
-`model` or `effort` — and the app cuts the worktree from the base. The lane
+the slice's slug, `name` a short lane handle, `wake_when_done: true`, and
+the lane's `model` and `effort` (by default `claude-opus-5-5` and `medium`)
+— and the app cuts the worktree from the base. The lane
 provisions it with whatever the project profile names (env seeding, LFS or
 submodule hydration, dependency installs, the project's worktree setup
 command). If that automation misfires, fix the hook installation rather than
