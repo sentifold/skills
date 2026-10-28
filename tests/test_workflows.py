@@ -313,7 +313,7 @@ class WorkflowPackageTests(unittest.TestCase):
         self.assertIn("Without a profile", text)
         self.assertIn("never import another", text)
         self.assertIn("(../review-agent/references/project-contract.md)", text)
-        self.assertIn("gh repo view --repo \"$REPO\" --json defaultBranchRef", text)
+        self.assertIn("gh repo view \"$REPO\" --json defaultBranchRef", text)
         self.assertIn("git symbolic-ref --short refs/remotes/<remote>/HEAD", text)
         self.assertIn("--head <fork-owner>:<branch>", text)
         for spelling in ("./scripts/create-pr.sh", "./Scripts/create-pr.sh"):

@@ -37,7 +37,7 @@ needs `--head <fork-owner>:<branch>` against `--repo <destination>`.
 Verify the default branch instead of guessing it:
 
 ```bash
-gh repo view --repo "$REPO" --json defaultBranchRef --jq .defaultBranchRef.name
+gh repo view "$REPO" --json defaultBranchRef --jq .defaultBranchRef.name
 git symbolic-ref --short refs/remotes/<remote>/HEAD   # git remote set-head <remote> --auto if unset
 ```
 
