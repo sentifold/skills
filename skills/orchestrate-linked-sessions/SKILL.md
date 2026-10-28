@@ -152,20 +152,15 @@ tasks follow the default "smallest direct change" behavior, not this ceremony.
   verification → the tester executor the project profile names for the
   surface. Performance captures → the profiler executor the profile names.
   The driver and its children, the Final Review among them, run on the
-  model and effort the person chose for its session: the design, the briefs
-  and the whole-scope review are the driver's. A lane runs on
+  model and effort the person chose for its session. A lane runs on
   `claude-opus-5-5` at effort `medium` by default, and its children inherit
-  the lane's pair: a lane carries out a validated brief, and the Codex leg
-  of its Code Review and the Final Review read its work (the owner's
-  decision of 28 October 2026, with the weekly limit on the strongest model
-  running out; the first run's lanes ran on this pair and landed seven PRs).
-  The person may name another pair for a lane, at its start or later: the
-  driver passes it to `start_session`, or sets it with `set_session_model`
-  and `set_session_effort` on a running lane and for a pair above its own,
-  which `start_session` cannot start. Every session and child inherits the
-  person's permission mode. Never pin a delegated role to another model or
-  effort on your own. The profile's Claude leg is the cross-provider
-  helper's setting for a Codex driver, not these children's.
+  the lane's pair. The person may name another pair for a lane, at its start
+  or later: the driver passes it to `start_session`, or sets it with
+  `set_session_model` and `set_session_effort` on a running lane and for a
+  pair above its own, which `start_session` cannot start. Every session and
+  child inherits the person's permission mode. Never pin a delegated role to
+  another model or effort on your own. The profile's Claude leg is the
+  cross-provider helper's setting for a Codex driver, not these children's.
 - **Stop and ask whenever a decision is ambiguous or a gate fails.** A silent
   guess at a fork is worse than a one-line question. See [Stop conditions](#stop-conditions).
 - **Bounded waits only.** Never wait unbounded on a remote, a background Codex
