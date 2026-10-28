@@ -170,9 +170,9 @@ python3 -m unittest discover -s tests -v
 ```
 
 Tests use temporary homes/repos and fake CLIs; they neither publish PRs nor call
-models. CI runs them on macOS and Linux with Python 3.11, 3.12 and 3.14. Keep
-behavior tests for installer conflicts, crash recovery and provider
-exit/cancel/result handling when changing them.
+models. CI runs them on Linux with Python 3.11, 3.12 and 3.14, and on macOS
+with Python 3.14. Keep behavior tests for installer conflicts, crash recovery and
+provider exit/cancel/result handling when changing them.
 Use independent task fixtures for workflow changes, then pilot the supported
 clients before rolling the version out to the team.
 
