@@ -178,7 +178,56 @@ problem the Final Review gate does, and the same answer: an own-engine
 substitute is a **degraded** pass, not a pass. Record it as
 `blocked: cross-provider unavailable — <reason>`, say so in the PR body, and
 carry the gap into closure rather than letting a second same-engine agent
-quietly stand in for a second engine.
+quietly stand in for a second engine. An installed extra engine on a third
+vendor is the one exception ([Extra engines](#extra-engines-optional)).
+
+## Extra engines (optional)
+
+Some machines also have a `cursor` skill (Cursor CLI) or a `kimi` skill (Kimi
+Code) among the session's available skills. Neither ships in this repository
+or under `SKILLS_ROOT`, and neither is required. **When the session has
+neither skill, skip this section and every reference to it**: no extra pass
+runs, nothing extra is recorded, and every gate runs exactly as written. A
+missing one is not an `Unknown skill` to recover. When one is present, read
+its `SKILL.md` before the first run; invoking `orchestrate` authorizes the
+uses below and no others. Each runs a third vendor's model (Cursor's default
+is Grok); a run on a Claude or OpenAI model through either is not an extra
+engine.
+
+- **Third opinion.** One read-only pass: in light, at the Final Review gate
+  over the whole scope; in heavy, also at each Design gate, in the same batch
+  as the counterpart validation. `cursor` takes it first (its ask mode cannot
+  edit), `kimi` when `cursor` is missing or out of plan usage. Verify each
+  finding in the code like any reviewer's: a confirmed defect is fixed, an
+  unconfirmed one blocks nothing. When both fail, the gate's own condition
+  decides; note it in the receipt.
+- **Substitute for the counterpart.** When the counterpart is still
+  unreachable after the re-probe above, give its Design or Code Review leg,
+  with the same read-only prompt, to `cursor`, else `kimi`. A third vendor
+  keeps the leg cross-provider: record `ran: substitute <engine> (<model>) —
+  <counterpart failure>` rather than `blocked: cross-provider unavailable`,
+  say so in the PR body, and re-probe the counterpart before closure. When
+  neither can run, the rule above stands. A substitute never stands in for
+  `review-agent`'s legs: `REVIEW INCOMPLETE` still stops and asks, and an
+  extra pass is evidence to offer at that stop.
+- **Small-lane worker, `kimi` only.** A lane whose task is small, fully
+  specified and low-risk may go to a `kimi` write run with `--cd` at the
+  lane's worktree, under the phase 3 handoff contract; risky or cross-cutting
+  lanes stay with the driver. The lane still passes both review legs, and
+  `kimi` never reviews its own lane: when that lane's substitute leg would
+  fall to `kimi`, the leg is `blocked: cross-provider unavailable`. This saves
+  the driver's and the counterpart's quota for the hard lanes, never quality:
+  use it only where `kimi`'s result can match the driver's.
+
+Take each engine's model from the profile's "Provider policy" when it names
+one for that engine, else the skill's documented default, and record the
+effective model in the receipt. Neither helper has a watcher: launch each run
+as one backgrounded call with its own `--out` file and a `--timeout`, which is
+the run's fixed deadline, and check it in bounded calls under the
+[bounded lifecycle](../review-agent/references/lifecycle.md); its exit code is
+the verdict. Exit 3 means a read-only run changed files: undo exactly the
+paths it reports and count the pass as failed. A plan-limit error is not
+retried; the next engine takes the pass.
 
 ## The loop
 
@@ -269,7 +318,8 @@ simpler alternatives, and risks.
 Design gate validations are read-only and independent of each other, so **launch them as
 one batch** — one backgrounded cross-provider run per sub-task, each with its
 own output file, probed through the counterpart skill's watcher. Do not hold
-sub-task B's validation until sub-task A's comes back.
+sub-task B's validation until sub-task A's comes back. In heavy, an installed
+extra engine's pass ([Extra engines](#extra-engines-optional)) joins that batch.
 
 **Do not start coding until the approach is clear AND cross-provider-validated.**
 If the counterpart returns only minor refinements, fold them in and proceed. If
@@ -354,7 +404,8 @@ background call.
 pinned to its own worktree, and the Write and Edit tools refuse paths in any other one ("belongs to a
 different worktree"). For a lane you implement yourself outside the session's worktree, write the
 content to the scratchpad and copy or patch it in with a Bash/Python step (then re-read the result),
-or hand the lane to a `codex` write run with `--cd` pointing at that worktree. Plan this before
+or hand the lane to a `codex` write run (or, for a small lane, a `kimi` one where
+installed — see [Extra engines](#extra-engines-optional)) with `--cd` pointing at that worktree. Plan this before
 opening several lanes, so the driver does not discover it mid-edit (observed on a three-lane run:
 every cross-worktree edit had to be re-routed).
 
@@ -709,6 +760,9 @@ the last commit.
    collection (`NEEDS_PARENT_FANOUT`). Never finish with "children are
    running" as though that were the report. A sequential native fallback
    must state its reduced independence.
+4. **The optional extra-engine pass** ([Extra engines](#extra-engines-optional)),
+   launched alongside the `review-agent` pass over the same scope, in light
+   and heavy. Skip it when no extra engine is installed.
 
 Reconcile every finding. Any blocking finding, or a review verdict of `blocked`,
 is a **Final Review gate failure — stop and ask**, then fix and re-run the affected pass
@@ -913,6 +967,7 @@ Report the smallest honest summary:
 - the scope-record verdict: each recorded outcome shipped / amended /
   descoped, naming the user decision behind every amendment
 - the weight the run used (`light` or `heavy`)
+- when an extra engine is installed: which ran, where, and on which model
 - per-sub-task/PR gate status using tagged statuses: `ran:`, `not-applicable:`,
   `blocked:`, `waived:`, or `degraded:` for Design / Code Review / Live Test, the per-scope
   Platform result (simulator verdict, and whether a device run was needed and made), the
@@ -952,6 +1007,9 @@ names live under `PROJECT_ROOT`.
 - PRs & chains: **`github-create-pr` skill**
 - cross-provider design validation / second review: **`codex` skill** from
   Claude Code; **`claude` skill** from Codex
+- optional third opinion, counterpart substitute, small-lane worker: the
+  **`cursor`** and **`kimi`** skills, only where installed
+  ([Extra engines](#extra-engines-optional))
 - implementation: the driver or a worker available to that runtime, in an
   isolated worktree
 - per-step native review / simplification: on Claude Code, three grouped

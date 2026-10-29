@@ -370,6 +370,25 @@ class WorkflowPackageTests(unittest.TestCase):
         self.assertIn("never through the Skill tool", text)
         self.assertIn("Provider policy", text)
 
+    def test_orchestrate_extra_engines_stay_optional(self):
+        text = (ROOT / "skills/orchestrate/SKILL.md").read_text()
+        section = text.split("## Extra engines (optional)\n", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("When the session has\nneither skill, skip this section and every reference to it", section)
+        self.assertIn("`REVIEW INCOMPLETE` still stops and asks", section)
+        self.assertIn("`kimi` never reviews its own lane", section)
+        self.assertIn("When\n  neither can run, the rule above stands.", section)
+        self.assertIn("Record it as\n`blocked: cross-provider unavailable — <reason>`", text)
+        self.assertEqual(text.count("(#extra-engines-optional)"), 5)
+        for name in ("## Runtime mapping\n", "## Gates summary\n", "## Stop conditions\n"):
+            body = text.split(name, 1)[1].split("\n## ", 1)[0]
+            if name != "## Stop conditions\n":  # Only the tables must stay as they are.
+                body = "\n".join(line for line in body.splitlines() if line.startswith("|"))
+            for engine in ("`cursor`", "`kimi`", "extra engine"):
+                self.assertNotIn(engine, body, (name, engine))
+        catalog = json.loads((ROOT / "catalog.json").read_text())
+        names = {package["name"] for package in catalog["packages"]}
+        self.assertFalse({"cursor", "kimi"} & names, "extra engines are never a catalog requirement")
+
     def test_orchestrate_metadata_is_explicit_only_and_portable(self):
         text = (ROOT / "skills/orchestrate/SKILL.md").read_text()
         frontmatter = text.split("---", 2)[1]
