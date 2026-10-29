@@ -943,8 +943,13 @@ one.
 
 **Stopping.** The person's stop in the driver stops nothing in the lanes: list
 the linked sessions and stop each one (`list_sessions` with `linked`, then
-`stop_session`), and report what was stopped. At closure the lane sessions
-stay for the person to open; archive them only on the person's word.
+`stop_session`), and report what was stopped. A lane is finished when its PR
+has merged and the driver has pushed that lane's closure to the notes ref: the
+driver archives it then, by its id with the PR as the reason
+(`mcp__ccd_session_mgmt__archive_session`), and the person's invocation is the
+word for that (observed: merged lanes stayed open in the sidebar until the
+person asked to archive them). Every other lane stays for the person to open,
+at closure too; archive one of those only on the person's word.
 
 Machine-wide build resources are easy to forget: a build-cache writer lease or
 a dependency-root lock that two lanes of the **same** session contend for
