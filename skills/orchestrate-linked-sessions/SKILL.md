@@ -200,7 +200,7 @@ only the person changes it.
 | Need | Who | How |
 |------|-----|-----|
 | Cross-provider design validation / review | the driver / the lane | `codex` skill, read-only/review |
-| Implementation | the lane | itself, or a `codex` write handoff into its own worktree |
+| Implementation | the lane | a `codex` write handoff into its own worktree, from a spec the lane writes, for anything nontrivial, fixes included; by hand only a trivial edit (a word, a caption, a conflict resolution, a one-line revert) |
 | First-order review | the lane | light: three grouped reviewer subagents; heavy: `/claude-stock-code-review` (copy of the stock `/code-review`) |
 | Simplification | the lane | light: folded into the quality reviewer; heavy: `/simplify` (model-invocable) |
 | Final layered review | the driver | `review-orchestrator` subagent, given the weight |
@@ -448,7 +448,7 @@ only once the predecessor's branch holds the implementation the design names,
 with `restack onto <that head>` first. Nothing is lost in the wait: the brief
 already carries the design as validated.
 
-The lane may implement directly or hand the work to a `codex` write run into
+The lane hands the work to a `codex` write run into
 its own worktree (`--cd` its worktree path). Any implementation handoff gets
 the same contract: **surgical edits only, DO
 NOT commit** (leave the tree dirty), run the named tests, print a short summary.
@@ -1103,7 +1103,7 @@ names live under `PROJECT_ROOT`.
 
 - PRs & chains: **`github-create-pr` skill**
 - cross-provider design validation / second review: the **`codex` skill**
-- implementation: the lane session, itself or through a `codex` write
+- implementation: the lane session, through a `codex` write
   handoff, in its own worktree
 - per-step native review / simplification: in the lane — three grouped
   reviewer subagents in light, **`/claude-stock-code-review`**
@@ -1153,8 +1153,8 @@ instructions; this file is its contract. Its order:
    `.local/orchestrate/<lane>/task.md`; read the profile, `AGENTS.md` and the
    laws the slice touches; record the base SHA. If the brief says wait, end
    the turn on the state line `ready` and write no code until `go`.
-2. **Implement** per phase 3 — yourself, or through a `codex` write handoff
-   into this worktree — then run the named tests, review `git diff`, commit,
+2. **Implement** per phase 3 and the runtime mapping, then run the named tests,
+   review `git diff`, commit,
    push, and open the draft PR against the brief's target (the
    `github-create-pr` skill); the app's PR monitor follows this session.
 3. **Gates**: the Code Review gate per phase 4, the Live Test gate per phase
