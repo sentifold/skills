@@ -196,16 +196,17 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   trusting a word of it. A match inside a line is no evidence: this note and
   the review-agent skill quote the word, and a run that reads them echoes it
   (observed on macOS, whose sandbox is not bubblewrap at all).
-- **Git worktrees: Codex cannot run git AT ALL under `workspace-write` (verified
+- **Git worktrees: Codex cannot write git metadata under `workspace-write` (verified
   2026-07-28).** A linked worktree's git metadata lives in the MAIN clone
   (`<main>/.git/worktrees/<name>/index.lock`, plus shared `objects`/`refs`) —
   outside any `--cd` you'd sanely grant, so `git add/commit/merge/checkout` die
   with `Unable to create ...index.lock: Permission denied`. (Real cost: a
   7-branch integration merge stalled mid-conflict.) Pattern that works:
-  **driver-git + file-only resolution** — the caller runs every git command
-  (merge, add, commit); Codex's task spec says "FILES ONLY — NO git commands"
-  and it only edits/resolves conflict markers in the working tree. Also budget
-  for npm installs: the sandbox blocks the registry, so new deps added to
+  **driver-git + file-only resolution** — the caller runs every git command that
+  writes (merge, add, commit); Codex's task spec says "FILES ONLY — NO git command
+  that writes" and it only edits/resolves conflict markers in the working tree;
+  read-only `git status`/`diff`/`log` still work there (verified 2026-11-03). Also
+  budget for npm installs: the sandbox blocks the registry, so new deps added to
   package.json must be `npm install`ed by the caller afterward.
 - **Web search is a provider-side tool, not a sandbox network toggle (verified
   codex-cli 0.142.5).** `--search` is a **top-level** flag — `codex exec --search`
