@@ -82,7 +82,8 @@ bash "$CODEX_HELPER" --model <m> --sandbox workspace-write --cd /abs/repo -- "<t
 Writes are confined to `--cd` **plus the system temp dirs** (`$TMPDIR`, `/tmp` —
 verified writable 2026-06-06, so `mktemp`-based test fixtures work). Outbound
 network is DENIED under workspace-write (verified: `curl` fails) — pass `--network`
-when the task needs downloads/`git fetch`.
+when the task needs downloads; a `git fetch` into the repository fails even then
+(`.git/` is read-only), so fetch before the handoff.
 
 The battle-tested delegation contract (used for real fixes on a large PR):
 1. Write the task spec to a file (full context: defect, exact files, required
@@ -148,6 +149,20 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   `/tmp` both writable — mktemp test fixtures work), but **no outbound network**
   (`curl`/downloads fail; pass `--network` to allow). Other absolute paths are
   blocked — capture results via `--out`/the result file, not via files at arbitrary paths.
+- **`workspace-write` keeps `.git/`, `.agents/` and `.codex/` at the top of `--cd`
+  read-only (verified 2026-11-03 on macOS, codex-cli 0.162.1, standalone clone).**
+  There `apply_patch` answers `writing outside of the project; rejected by user
+  approval settings` and the shell `operation not permitted`, even for a `.codex/`
+  that does not exist yet; so git mutations fail (`.git/index.lock`) in a standalone
+  clone too, not only in a linked worktree (below). Other dot-directories
+  (`.github/`, `.claude/`) and the same names deeper down (`docs/.agents/`) stay
+  writable. A handoff that edits a repo's own skills learns it only from the final
+  message: in sentifold/sleash#1069 every target was under `.agents/skills/`, and
+  Codex tested its patch on temporary copies and left the repository unchanged.
+  Pattern that works: for files under `.agents/` or `.codex/`, have the spec ask for
+  a unified diff in the final message, between markers, and `git apply` it from the
+  caller; or run `--sandbox danger-full-access` with a hard constraint line in the
+  prompt (the files it may write; no git mutations, builds or setup commands).
 - **Linux: `read-only` can fail to run ANY command where bubblewrap cannot create
   namespaces (verified 2026-09-11).** Codex's Linux sandbox is bubblewrap; on a host
   that denies it (container, hardened kernel, restricted user namespaces) every
@@ -181,16 +196,17 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   trusting a word of it. A match inside a line is no evidence: this note and
   the review-agent skill quote the word, and a run that reads them echoes it
   (observed on macOS, whose sandbox is not bubblewrap at all).
-- **Git worktrees: Codex cannot run git AT ALL under `workspace-write` (verified
+- **Git worktrees: Codex cannot write git metadata under `workspace-write` (verified
   2026-07-28).** A linked worktree's git metadata lives in the MAIN clone
   (`<main>/.git/worktrees/<name>/index.lock`, plus shared `objects`/`refs`) —
   outside any `--cd` you'd sanely grant, so `git add/commit/merge/checkout` die
   with `Unable to create ...index.lock: Permission denied`. (Real cost: a
   7-branch integration merge stalled mid-conflict.) Pattern that works:
-  **driver-git + file-only resolution** — the caller runs every git command
-  (merge, add, commit); Codex's task spec says "FILES ONLY — NO git commands"
-  and it only edits/resolves conflict markers in the working tree. Also budget
-  for npm installs: the sandbox blocks the registry, so new deps added to
+  **driver-git + file-only resolution** — the caller runs every git command that
+  writes (merge, add, commit); Codex's task spec says "FILES ONLY — NO git command
+  that writes" and it only edits/resolves conflict markers in the working tree;
+  read-only `git status`/`diff`/`log` still work there (verified 2026-11-03). Also
+  budget for npm installs: the sandbox blocks the registry, so new deps added to
   package.json must be `npm install`ed by the caller afterward.
 - **Web search is a provider-side tool, not a sandbox network toggle (verified
   codex-cli 0.142.5).** `--search` is a **top-level** flag — `codex exec --search`
@@ -292,7 +308,7 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
 
 - [ ] ALWAYS go through the helper script — never the bare/interactive `codex` from a tool shell.
 - [ ] Default to `--sandbox read-only`; only `workspace-write --cd <repo>` when edits are required.
-- [ ] Task needs downloads / `git fetch` / any network? Add `--network` (workspace-write denies it by default).
+- [ ] Task needs downloads / any network? Add `--network` (workspace-write denies it by default). A `git fetch` into the repo fails even with it: fetch before the handoff.
 - [ ] Web search is ON by default so verify/second-opinion runs can cite public facts; pass `--no-search` only for a deliberately hermetic/offline run. (`--search`/`--network` are unrelated — provider tool vs local sandbox net.)
 - [ ] Linux host? Grep the finished run's `provider.stdout`/`provider.stderr` for lines beginning `bwrap: ` and confirm its commands failed before trusting a verdict that cites no file. Elsewhere skip the grep: a quoted `bwrap:` inside a line is skill text the run read.
 - [ ] Write-mode spec: surgical edits, DO NOT commit, run named tests, print summary; then re-verify and commit yourself.
