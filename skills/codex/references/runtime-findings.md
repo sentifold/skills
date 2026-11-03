@@ -82,7 +82,8 @@ bash "$CODEX_HELPER" --model <m> --sandbox workspace-write --cd /abs/repo -- "<t
 Writes are confined to `--cd` **plus the system temp dirs** (`$TMPDIR`, `/tmp` —
 verified writable 2026-06-06, so `mktemp`-based test fixtures work). Outbound
 network is DENIED under workspace-write (verified: `curl` fails) — pass `--network`
-when the task needs downloads/`git fetch`.
+when the task needs downloads; a `git fetch` into the repository fails even then
+(`.git/` is read-only), so fetch before the handoff.
 
 The battle-tested delegation contract (used for real fixes on a large PR):
 1. Write the task spec to a file (full context: defect, exact files, required
@@ -306,7 +307,7 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
 
 - [ ] ALWAYS go through the helper script — never the bare/interactive `codex` from a tool shell.
 - [ ] Default to `--sandbox read-only`; only `workspace-write --cd <repo>` when edits are required.
-- [ ] Task needs downloads / `git fetch` / any network? Add `--network` (workspace-write denies it by default).
+- [ ] Task needs downloads / any network? Add `--network` (workspace-write denies it by default). A `git fetch` into the repo fails even with it: fetch before the handoff.
 - [ ] Web search is ON by default so verify/second-opinion runs can cite public facts; pass `--no-search` only for a deliberately hermetic/offline run. (`--search`/`--network` are unrelated — provider tool vs local sandbox net.)
 - [ ] Linux host? Grep the finished run's `provider.stdout`/`provider.stderr` for lines beginning `bwrap: ` and confirm its commands failed before trusting a verdict that cites no file. Elsewhere skip the grep: a quoted `bwrap:` inside a line is skill text the run read.
 - [ ] Write-mode spec: surgical edits, DO NOT commit, run named tests, print summary; then re-verify and commit yourself.
