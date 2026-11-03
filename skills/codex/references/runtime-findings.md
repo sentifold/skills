@@ -148,6 +148,20 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   `/tmp` both writable — mktemp test fixtures work), but **no outbound network**
   (`curl`/downloads fail; pass `--network` to allow). Other absolute paths are
   blocked — capture results via `--out`/the result file, not via files at arbitrary paths.
+- **`workspace-write` keeps `.git/`, `.agents/` and `.codex/` at the top of `--cd`
+  read-only (verified 2026-11-03 on macOS, codex-cli 0.162.1, standalone clone).**
+  There `apply_patch` answers `writing outside of the project; rejected by user
+  approval settings` and the shell `operation not permitted`, even for a `.codex/`
+  that does not exist yet; so git mutations fail (`.git/index.lock`) in a standalone
+  clone too, not only in a linked worktree (below). Other dot-directories
+  (`.github/`, `.claude/`) and the same names deeper down (`docs/.agents/`) stay
+  writable. A handoff that edits a repo's own skills learns it only from the final
+  message: in sentifold/sleash#1069 every target was under `.agents/skills/`, and
+  Codex tested its patch on temporary copies and left the repository unchanged.
+  Pattern that works: for files under `.agents/` or `.codex/`, have the spec ask for
+  a unified diff in the final message, between markers, and `git apply` it from the
+  caller; or run `--sandbox danger-full-access` with a hard constraint line in the
+  prompt (the files it may write; no git mutations, builds or setup commands).
 - **Linux: `read-only` can fail to run ANY command where bubblewrap cannot create
   namespaces (verified 2026-09-11).** Codex's Linux sandbox is bubblewrap; on a host
   that denies it (container, hardened kernel, restricted user namespaces) every
