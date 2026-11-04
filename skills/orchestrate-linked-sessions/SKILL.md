@@ -749,6 +749,16 @@ person — a sign-in only they may approve, a device, a decision — counts as
 reported: name that item in the pass's scope, and flip its PR ready once the
 person acts, with no new pass unless its code changes.
 
+**The pass reads a head that holds still.** Until it returns, the driver
+holds each lane it reads — `pause`, then wait for the lane's `paused`, or ask
+it not to rebase — or points the pass and its Codex leg's `--cd` at a
+detached worktree of the reviewed head,
+`git worktree add --detach <tmp> <head>`, in place of the lane's (observed
+twice in one run: a lane rebased while the Codex leg read its worktree). A
+head that a rebase moved is certified by
+`git range-diff <old-base>..<old-head> <new-base>..<new-head>` showing the
+lane's hunks unchanged, never by a fresh pass.
+
 1. **Fidelity to the scope record.** Re-read the intake scope record and hold
    the delivered set against it: every promised outcome shipped or covered by
    an approved amendment, the done-proof actually holds, and nothing material
@@ -786,7 +796,11 @@ person acts, with no new pass unless its code changes.
    The subagent runs in the driver's worktree and writes its report there,
    under the run's evidence path; the lane worktrees it is handed are read,
    never written — a refused write into one of them is the wrong location,
-   not a failed pass.
+   not a failed pass. Where the runtime refuses a subagent's report file in
+   any location (observed in every pass of one run, in the desktop app:
+   "Subagents should return findings as text, not write report files"), the
+   text wins: the subagent returns the whole report in its result, and the
+   driver saves it verbatim at the report path before closure.
    Follow the skill's capability-based topology and
    [bounded lifecycle](../review-agent/references/lifecycle.md): the parent
    owns completion, child handles and results are tracked, and in heavy a
