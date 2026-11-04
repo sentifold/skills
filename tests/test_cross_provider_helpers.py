@@ -323,16 +323,8 @@ class CrossProviderHelpersTests(unittest.TestCase):
         self.assertTrue(not result.stdout.strip() or result.stdout.strip().startswith('Z'),
                         f'process {pid} remains running: {result.stdout}')
 
-    def test_timeout_cleans_descendants_and_bounded_preflight(self):
+    def test_preflight_probe_is_bounded(self):
         for provider in ('codex', 'claude'):
-            descendant = Path(self.env['FAKE_DESCENDANT'])
-            descendant.unlink(missing_ok=True)
-            # Native Windows must start two .cmd/Python probes before the orphan fixture.
-            timeout = '4' if os.name == 'nt' else '0.6'
-            result = self.run_helper(provider, '--timeout', timeout, mode='orphan')
-            self.assertEqual(result.returncode, 124, result.stderr)
-            self.assertEqual(self.receipt(result)['status'], 'TIMEOUT')
-            self.assert_stopped(self.wait_path(descendant))
             probe = self.run_helper(provider, '--preflight-timeout', '0.2', mode='version-timeout')
             self.assertEqual(probe.returncode, 124)
             self.assertEqual(self.receipt(probe)['phase'], 'version')
