@@ -207,7 +207,11 @@ The **orchestrator** owns the whole run:
    report path when one was written. Write a report file only when requested
    by the user or the target project contract, using a caller-selected local
    path (create the directory first); publishing a report is a separate
-   action. If any leg ran on a fast/cheap tier, flag the run as degraded —
+   action. Where the runtime refuses that write (observed in every pass of
+   one orchestrate run, in the desktop app: "Subagents should return findings
+   as text, not write report files"), the text wins: return the whole report
+   in the result, and the caller saves it verbatim at that path.
+   If any leg ran on a fast/cheap tier, flag the run as degraded —
    judgment work belongs on strong models.
 
    **Open the summary with one of exactly two lines**, so a caller can tell a

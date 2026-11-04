@@ -749,6 +749,14 @@ person — a sign-in only they may approve, a device, a decision — counts as
 reported: name that item in the pass's scope, and flip its PR ready once the
 person acts, with no new pass unless its code changes.
 
+**The pass reads a head that holds still.** Before the pass, the driver
+sends each lane it reads `pause` and waits for its `paused`, and sends `go`
+once the pass returns (observed twice in one run: a lane rebased while the
+Codex leg read its worktree). A head that a later rebase moves needs no new
+pass when `git range-diff <old-base>..<old-head> <new-base>..<new-head>`
+shows the lane's hunks unchanged; a hunk it shows changed is re-reviewed
+like a fix.
+
 1. **Fidelity to the scope record.** Re-read the intake scope record and hold
    the delivered set against it: every promised outcome shipped or covered by
    an approved amendment, the done-proof actually holds, and nothing material
@@ -786,7 +794,11 @@ person acts, with no new pass unless its code changes.
    The subagent runs in the driver's worktree and writes its report there,
    under the run's evidence path; the lane worktrees it is handed are read,
    never written — a refused write into one of them is the wrong location,
-   not a failed pass.
+   not a failed pass. Where the runtime refuses a subagent's report file in
+   any location (observed in every pass of one run, in the desktop app:
+   "Subagents should return findings as text, not write report files"), the
+   text wins: the subagent returns the whole report in its result, and the
+   driver saves it verbatim at the report path before closure.
    Follow the skill's capability-based topology and
    [bounded lifecycle](../review-agent/references/lifecycle.md): the parent
    owns completion, child handles and results are tracked, and in heavy a
@@ -1196,7 +1208,8 @@ person what the driver owns (scope, models, the merge). It does ask the person
 about its own gate failures, in the checkpoint shape, in its own thread, after
 telling the driver in one line.
 
-Messages it answers: `go` (start the warm build, then the code; when it
+Messages it answers: `go` (start the warm build, then the code, or after a
+`pause` carry on from where it stopped; when it
 names a head, restack onto it first); `pause` (finish the step in flight,
 commit nothing new, report the state line `paused`, wait for `go`);
 `restack onto <ref>` (rebase `--onto`,
