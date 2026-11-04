@@ -749,15 +749,13 @@ person — a sign-in only they may approve, a device, a decision — counts as
 reported: name that item in the pass's scope, and flip its PR ready once the
 person acts, with no new pass unless its code changes.
 
-**The pass reads a head that holds still.** Until it returns, the driver
-holds each lane it reads — `pause`, then wait for the lane's `paused`, or ask
-it not to rebase — or points the pass and its Codex leg's `--cd` at a
-detached worktree of the reviewed head,
-`git worktree add --detach <tmp> <head>`, in place of the lane's (observed
-twice in one run: a lane rebased while the Codex leg read its worktree). A
-head that a rebase moved is certified by
-`git range-diff <old-base>..<old-head> <new-base>..<new-head>` showing the
-lane's hunks unchanged, never by a fresh pass.
+**The pass reads a head that holds still.** Before the pass, the driver
+sends each lane it reads `pause` and waits for its `paused`, and sends `go`
+once the pass returns (observed twice in one run: a lane rebased while the
+Codex leg read its worktree). A head that a later rebase moves needs no new
+pass when `git range-diff <old-base>..<old-head> <new-base>..<new-head>`
+shows the lane's hunks unchanged; a hunk it shows changed is re-reviewed
+like a fix.
 
 1. **Fidelity to the scope record.** Re-read the intake scope record and hold
    the delivered set against it: every promised outcome shipped or covered by
@@ -1210,7 +1208,8 @@ person what the driver owns (scope, models, the merge). It does ask the person
 about its own gate failures, in the checkpoint shape, in its own thread, after
 telling the driver in one line.
 
-Messages it answers: `go` (start the warm build, then the code; when it
+Messages it answers: `go` (start the warm build, then the code, or after a
+`pause` carry on from where it stopped; when it
 names a head, restack onto it first); `pause` (finish the step in flight,
 commit nothing new, report the state line `paused`, wait for `go`);
 `restack onto <ref>` (rebase `--onto`,
