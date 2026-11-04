@@ -30,8 +30,8 @@ Do not repeatedly poll unchanged state or use an unbounded shell `until` loop.
 Where the runtime blocks a foreground `sleep` and exposes no wait tool
 (observed in every pass of one orchestrate run), each bounded call is one
 script run that rereads the provider receipt's `status` every five seconds,
-waiting with Python's `select.select([], [], [], 5)` rather than `sleep`, and
-returns at a terminal status or after 60 seconds.
+waiting with Python's `threading.Event().wait(5)` rather than the shell's
+`sleep`, and returns at a terminal status or after 60 seconds.
 Run capacity-limited work in waves and release only children owned by this run
 when the runtime supports it.
 
