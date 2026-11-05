@@ -434,6 +434,32 @@ _Ownership = _WindowsJobOwnership if os.name == "nt" else _PosixOwnership
 SUPERVISOR_SIGNALS = (signal.SIGINT, signal.SIGTERM) + ((signal.SIGBREAK,) if os.name == "nt" else ())
 
 
+def read_provider_error(stderr):
+    try:
+        with stderr.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            start = max(0, stream.tell() - 64 * 1024)
+            stream.seek(max(0, start - 1))
+            at_line_start = start == 0 or stream.read(1) == b"\n"
+            tail = stream.read(64 * 1024)
+            if not at_line_start:
+                tail = tail.partition(b"\n")[2]
+            tail = tail.decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+    errors = []
+    for line in reversed(tail.splitlines()):
+        line = line.strip()
+        if not line.startswith("ERROR:"):
+            continue
+        error = line[len("ERROR:"):].lstrip()
+        if error and error not in errors:
+            errors.append(error)
+            if len(errors) == 3:
+                break
+    return " | ".join(error[:300] for error in reversed(errors))
+
+
 class Run:
     def __init__(self, provider, args):
         self.provider, self.args = provider, args
@@ -780,7 +806,11 @@ class Run:
             rc, stdout, stderr = self.execute(argv, "provider", stdin=stdin, cwd=cwd)
         self.save(child_exit_code=rc)
         if rc:
-            raise RunError(f"Selected {self.provider} failed (rc={rc}); inspect {stderr} and {stdout}. "
+            error = read_provider_error(stderr)
+            if error:
+                self.data["provider_error"] = error
+            detail = f": {error}" if error else ""
+            raise RunError(f"Selected {self.provider} failed (rc={rc}){detail}; inspect {stderr} and {stdout}. "
                            "Model/effort and executable were not substituted; check selected CLI capabilities, "
                            "authentication and matching companion resources if required.", rc if rc > 0 else 128 - rc)
         if self.provider == "claude":

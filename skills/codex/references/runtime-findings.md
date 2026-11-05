@@ -220,6 +220,12 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   cross-checks. Use `--no-search` only for an intentionally hermetic/offline run.
 - **One turn is finite.** A single run handed dozens of items exhausts the turn before
   producing output. Batch (mode 4).
+- **Capacity can fail a long run.** `codex exec` may exit 1 with `ERROR: Selected
+  model is at capacity. Please try a different model.` (observed 2026-11-05 with
+  `gpt-6-astra` at `xhigh`, after 872 s and 278 tool calls on an open review prompt).
+  This refusal is transient; the receipt now names it in `provider_error`. Retry
+  once, narrower — a prompt that names its files and regions — on the same model
+  and effort, never by substituting a model.
 - **Reasoning effort drives latency.** An omitted `--effort` inherits the Codex
   config; the helper does not force `max`. Astra supports `max`, but deep reasoning
   can make even trivial prompts take minutes. Pass `--effort low` (or `medium`)

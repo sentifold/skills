@@ -255,6 +255,17 @@ landed from the helper's receipt (`status`, `diagnostic`, the result file), not
 from the exit code alone. Pass prompt text without shell interpolation hazards;
 follow the selected helper's supported arguments.
 
+On a narrow pass — a re-run after fixes or the first-order fallback over
+caller-named ranges — the prompt names the files and line regions the leg reads:
+the delta's hunks, their enclosing functions, the call sites the change reaches,
+and any wider read it may make. An open prompt over a small delta sends a strong
+model through unrelated whole files until its budget or provider capacity ends
+the run (observed: 278 tool calls and a capacity failure on a 44-line delta; 31
+calls with a region list, the same verdict). Retry a leg failed by a provider's
+transient refusal (the receipt's `provider_error`) using the narrower,
+region-naming prompt as the changed, evidence-based recovery step, on the same
+model and effort, within the original budget; record both attempts.
+
 For review, request read-only permissions and the minimum required tools. Do
 not broaden permissions, switch to metered credentials, or grant implementation
 access to recover a failed review. A helper's intended permissions are not

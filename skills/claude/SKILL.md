@@ -93,8 +93,8 @@ cleanup; 127 missing executable; 130/143 cancellation (149 for Windows
 Ctrl+Break); otherwise the child's failure code (128+signal for a signal death). These are ambiguous on their
 own: a child exiting 2, 3, 4, 124, 125 or 127 is passed through unchanged,
 and a preflight probe that dies by signal or exits 126+ is reported as 2.
-Read the receipt's `status`, `diagnostic` and `child_exit_code` to tell them
-apart.
+Read the receipt's `status`, `diagnostic`, `provider_error` (the provider's final
+`ERROR:` lines, when present) and `child_exit_code` to tell them apart.
 
 ## Changes from the repo-local helpers
 

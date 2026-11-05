@@ -58,6 +58,11 @@ if mode in ('hang', 'orphan'):
 if mode == 'fail':
     print('OLD_EXIT CODEX_RUN_EXIT rc=0')
     sys.exit(42)
+if mode == 'capacity':
+    print('provider starting\nprovider progress', file=sys.stderr)
+    for _ in range(2):
+        print('ERROR: Selected model is at capacity. Please try a different model.', file=sys.stderr)
+    sys.exit(1)
 if mode == 'missing':
     if '-p' in args:
         print(json.dumps({'subtype': 'success'}))
@@ -277,6 +282,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
             self.assertEqual(stale.read_text(), 'OLD SUCCESS')
             new = self.run_helper(provider, mode='fail')
             self.assertEqual(new.returncode, 42)
+            self.assertNotIn('provider_error', self.receipt(new))
             self.assertNotEqual(old_receipt['run_id'], self.receipt(new)['run_id'])
             self.assertNotEqual(old_receipt['result'], self.receipt(new)['result'])
             log = self.root / f'{provider}.log'
@@ -286,6 +292,38 @@ class CrossProviderHelpersTests(unittest.TestCase):
             self.assertTrue(verdict.stdout.startswith('FAILED '), verdict.stdout)
             self.assertIn('rc=42', verdict.stdout)
             self.assertEqual(self.watch(provider, log, '--run-id', old_receipt['run_id']).returncode, 0)
+
+    def test_provider_failure_records_capacity_error(self):
+        for provider in ('codex', 'claude'):
+            with self.subTest(provider=provider):
+                result = self.run_helper(provider, mode='capacity')
+                self.assertEqual(result.returncode, 1)
+                receipt = self.receipt(result)
+                self.assertEqual(receipt['status'], 'FAILED')
+                self.assertEqual(receipt['provider_error'],
+                                 'Selected model is at capacity. Please try a different model.')
+                self.assertIn('(rc=1): Selected model is at capacity', receipt['diagnostic'])
+                self.assertIn(receipt['stderr'], receipt['diagnostic'])
+
+    def test_provider_error_tail_limits_and_last_appearance_order(self):
+        stderr = self.root / 'provider.stderr'
+        stderr.write_bytes(b'ERROR: outside tail\n' + b'x' * (64 * 1024)
+                           + b'\nERROR: replacement \xff\n')
+        self.assertEqual(RUNTIME.read_provider_error(stderr), 'replacement \ufffd')
+        stderr.write_bytes(b'prefix ERROR: bogus\n' + b'x' * 65523)
+        self.assertEqual(RUNTIME.read_provider_error(stderr), '')
+        stderr.write_bytes(b'z\n' + b'ERROR: kept\n'
+                           + b'x' * (64 * 1024 - len(b'ERROR: kept\n')))
+        self.assertEqual(RUNTIME.read_provider_error(stderr), 'kept')
+        long_error = '\u00e9' * 301
+        stderr.write_text('ERROR: oldest\nERROR: repeated\nERROR: middle\n'
+                          '  ERROR: repeated  \nERROR: ' + long_error + '\n'
+                          'ERROR: middle\nordinary stderr\nERROR:   \n'
+                          'prefix ERROR: ignored\n', encoding='utf-8')
+        self.assertEqual(RUNTIME.read_provider_error(stderr),
+                         'repeated | ' + long_error[:300] + ' | middle')
+        stderr.unlink()
+        self.assertEqual(RUNTIME.read_provider_error(stderr), '')
 
     def test_success_requires_complete_intact_output_and_clean_claude_envelope(self):
         for provider in ('codex', 'claude'):
