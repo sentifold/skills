@@ -77,13 +77,18 @@ Each invocation creates a private, unique run directory
 `provider.stderr`), preflight evidence and `result.txt`. Only the supervisor
 writes lifecycle stdout: `CODEX_RUN_START` and `CODEX_RUN_EXIT` followed by JSON
 with `run_id` and `receipt`. Model text cannot supply control records. The
-receipt records the selected executable/version, status, exit code, output
-path, result digest, the child PID, `deadline_at` (wall clock, informational)
-and `deadline_remaining` (the supervisor's monotonic clock, which alone decides
-a timeout). It also records the `model` and `reasoning_effort` that `codex exec`
-reports in the settings header at the top of its stderr, so a provider policy
-can be checked from the receipt alone; both are absent when the CLI prints no
-such header.
+receipt records the selected executable (`cli`) and version string (`cli_version`),
+status, exit code, output path, result digest, the child PID, `deadline_at` (wall
+clock, informational) and `deadline_remaining` (the supervisor's monotonic clock,
+which alone decides a timeout). It also records the `model` and `reasoning_effort`
+that `codex exec` reports in the settings header at the top of its stderr, so a
+provider policy can be checked from the receipt alone; both are absent when the
+CLI prints no such header. A failed provider run records `provider_error` only
+when the provider printed nonempty `ERROR:` lines in the last 64 KiB of its stderr
+(deduplicated, the last three, each cut to 300 characters). Its `diagnostic` then
+opens with it, so a caller can tell a transient refusal — `Selected model is at
+capacity` — from an authentication or capability failure without opening
+`provider.stderr`.
 
 `--out` must name an unused file. The helper reserves it exclusively, publishes
 only a nonempty final result after successful CLI exit, and removes its empty
@@ -144,7 +149,8 @@ Helper exit codes: 0 success, 2 usage/preflight failure, 4 missing result,
 code; a child killed by a signal reports 128+signal. These codes are ambiguous on their own: a child that
 itself exits 2, 4, 124, 125 or 127 is passed through unchanged, and a preflight
 probe that dies by signal or exits 126+ is reported as 2. Always read the
-receipt's `status`, `diagnostic` and `child_exit_code` to distinguish causes.
+receipt's `status`, `diagnostic`, `provider_error` and `child_exit_code` to
+distinguish causes.
 
 ## Configuration and access
 
