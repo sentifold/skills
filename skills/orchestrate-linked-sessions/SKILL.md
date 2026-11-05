@@ -821,13 +821,17 @@ like a fix.
 Reconcile every finding. Any blocking finding, or a review verdict of `blocked`,
 is a **Final Review gate failure — stop and ask**, then fix and re-run the affected pass
 on the new snapshot, preserving unaffected results with their provenance.
-Every range that reaches the final head after the pass — a finding's fix, an
+A range that reaches the final head after the pass — a finding's fix, an
 amendment, a change the person asks for — gets a cross-provider read before
-its PR goes ready, and so do the fixes for what that read finds; the
-driver's own read alone certifies only a rebase whose range-diff shows the
-hunks unchanged, or a one-line copy edit (observed: the driver alone re-read
-a last fix round of +257/−79 lines, and the Codex read the person then asked
-for found two P1 in it). A
+its PR goes ready when it is substantial or touches hunks no reviewer has
+read. The driver's own read alone certifies a small follow-up it verifies
+directly: a rebase whose range-diff shows the hunks unchanged, a copy edit, a
+fix of a few lines inside hunks a reviewer has already read. The loop ends
+when a read passes or leaves only such follow-ups (observed: the driver alone
+re-read a last fix round of +257/−79 lines, and the Codex read the person
+then asked for found two P1 in it; on an earlier PR, four passes each found
+one P2 in the previous pass's ~15-line fix, and the person called it running
+in circles). A
 **`REVIEW INCOMPLETE` report also fails the Final Review gate**: if a review leg couldn't finish
 (a backend not logged in, a rate limit, a timeout), do **not** treat the
 degraded result as a pass — **stop and ask** the user how to proceed (accept
