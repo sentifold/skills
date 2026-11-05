@@ -528,7 +528,7 @@ never the implementation briefs, earlier review reports or PR threads they
 came from. It opens code by line range — the function or type enclosing each
 hunk, the call sites and helpers its greps turn up — never a whole source
 file, and batches its reads: one command prints several hunks, not one per
-turn. Give it a budget it can keep itself, 40 tool calls: at the 40th it
+turn. Give it a budget it can keep itself, 80 tool calls: at the 80th it
 stops and returns what it has, ranked as usual, with unfinished leads marked
 unverified and the hunks it never reached named, instead of exploring
 open-endedly. Those hunks go to a fresh reviewer with the same brief and
@@ -541,10 +541,10 @@ never a silent wait (observed: a fix-delta reviewer handed two
 implementation briefs, three review reports and the PR thread read whole
 files and traced code one command per turn: 183 turns, a ~485k-token context,
 36 minutes of which its tools took 31 seconds, until the driver told it to
-wrap up; in a later run two of three reviewers given "about 40 tool calls or
-15 minutes" ran on until the lane's wrap-up, one reporting itself within
-budget at 49 calls, while a restack waited on them; a reviewer told to stop
-at its 40th call returned at 40).
+wrap up; in a later run, ten reviewers given "about 40 tool calls or 15
+minutes" took 34 to 76 calls and 10 to 18 minutes, the two longest only
+after the lane's wrap-up while a restack waited, one of them calling itself
+within budget at 49 calls; one told to stop at its 40th call returned at 40).
 
 **In heavy, the forked native review can die silently.** `/claude-stock-code-review` forks
 finder subagents and a verifier; on a session model rate limit (`You've reached
@@ -959,11 +959,13 @@ design and its validations, the lane briefs, the ledger, every lane's
 receipt, the Final Review report, the closure — to
 `refs/orchestrate/<run>/notes` in the repository when the Design gate
 passes, at each lane's closure and at the run's closure, and every PR body
-links the ref. The ref's tree holds the folder's contents at its root
-(`git show refs/orchestrate/<run>/notes:scope-record.md`), and each commit's
-parent is the remote tip fetched right before that push, never the local ref
-of that name, which every worktree of the repository shares and any fetch
-into it rewrites (observed: a first push carried the whole
+links the ref. The ref's tree holds the folder's contents at its root, so a
+reader fetches it (`git fetch -f origin
+refs/orchestrate/<run>/notes:refs/orchestrate/<run>/notes`) and reads
+`git show refs/orchestrate/<run>/notes:scope-record.md`. Each commit's parent
+is the remote tip fetched right before that push, never that local ref,
+which every worktree of the repository shares and any fetch into it rewrites
+(observed: a first push carried the whole
 `.local/orchestrate/<run>/` path, and a later one was rejected on a local ref
 gone back to an older tip):
 

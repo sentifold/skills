@@ -201,16 +201,15 @@ The **orchestrator** owns the whole run:
    current target (rerun the scope helper). If it changed, the report covers
    the old snapshot only. Re-review affected coverage when authorized; do not
    certify the newer tree with stale results.
-7. **Report.** Return findings and coverage directly to the caller: finding
+7. **Report.** Return the whole report directly to the caller: finding
    counts by severity, every verified finding, lens selection with one-line
-   rationale, legs status (effective model, effort, turns, failures), and the
-   report path when one was written. Write a report file only when requested
-   by the user or the target project contract, using a caller-selected local
-   path (create the directory first); publishing a report is a separate
-   action. Where the runtime refuses that write (observed in every pass of
-   one orchestrate run, in the desktop app: "Subagents should return findings
-   as text, not write report files"), the text wins: return the whole report
-   in the result, and the caller saves it verbatim at that path.
+   rationale, and legs status (effective model, effort, turns, failures).
+   Write no report file: where the user or the target project contract asks
+   for one, the caller saves the returned report verbatim at a local path it
+   selects, because the desktop app refuses a subagent's report file in any
+   location ("Subagents should return findings as text, not write report
+   files"; observed in every pass of two orchestrate runs). Publishing a
+   report is a separate action.
    If any leg ran on a fast/cheap tier, flag the run as degraded —
    judgment work belongs on strong models.
 
@@ -220,7 +219,7 @@ The **orchestrator** owns the whole run:
    apology — means the run did not finish, whatever the notification said.
 
 The orchestrator is read-only with respect to the source tree: findings are
-reported, never auto-fixed; the report artifact is its only write. For a very
+reported, never auto-fixed, and the caller saves any report file. For a very
 large diff, split it into subsystem-aligned chunks, repeat steps 3–5 per
 chunk, and state chunk coverage in the report instead of doing one shallow
 pass.

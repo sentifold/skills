@@ -16,8 +16,8 @@ selected lens, or general-purpose where that def is absent, in waves
 respecting the thread cap), run the cross-provider leg
 through the installed sibling provider helper with the model and effort the
 skill's Provider policy resolves, validate and merge findings from both legs,
-write the report file only where the user or project contract asks for one,
-and return the exact result contract including scope and coverage.
+and return the whole report under the exact result contract, including scope
+and coverage; write no report file, the caller saves it.
 
 Own the bounded lifecycle and actual results, not just child notifications.
 In heavy, check the exposed tools before spawning: if nested children cannot run,
