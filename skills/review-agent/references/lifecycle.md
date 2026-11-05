@@ -4,9 +4,9 @@ The agent owning the review remains responsible until it returns a report or
 an explicit incomplete result. An async child notification only says its turn
 ended; inspect its actual result before marking its assignment complete.
 
-Before dispatch, record a run ledger in working context (or a user-requested
-local report): repository, scope IDs/digest, selected lens paths, each child or
-provider job handle, owner, start, deadline, last observed state, and result.
+Before dispatch, record a run ledger in working context: repository, scope
+IDs/digest, selected lens paths, each child or provider job handle, owner,
+start, deadline, last observed state, and result.
 Choose an overall budget before launching: honor a user/project budget; absent
 one use a 30-minute review budget and provider helper timeouts within it. A
 budget limits orchestration work, not arbitrary unrelated machine processes.

@@ -502,19 +502,23 @@ never the implementation briefs, earlier review reports or PR threads they
 came from. It opens code by line range — the function or type enclosing each
 hunk, the call sites and helpers its greps turn up — never a whole source
 file, and batches its reads: one command prints several hunks, not one per
-turn. Give it a budget of ~40 tool calls or ~15 minutes of agent time; one
-that cannot finish within budget returns what it has, ranked as usual, with
-unfinished leads marked unverified and the hunks it never reached named,
-instead of exploring open-endedly. Those hunks go to a fresh reviewer with
-the same brief and budget — the lifecycle's waves — until every hunk has
-had a reader; the gate never passes on an unread hunk. The budget is the fixed
-deadline the [bounded lifecycle](../review-agent/references/lifecycle.md)
-requires of every wait: past it the driver sends one wrap-up message
-(SendMessage), never a silent wait (observed: a fix-delta reviewer handed two
+turn. Give it a budget it can keep itself, 80 tool calls: at the 80th it
+stops and returns what it has, ranked as usual, with unfinished leads marked
+unverified and the hunks it never reached named, instead of exploring
+open-endedly. Those hunks go to a fresh reviewer with the same brief and
+budget — the lifecycle's waves — until every hunk has had a reader; the gate
+never passes on an unread hunk. The clock is the driver's, since a subagent
+keeps none: ~15 minutes from the launch is the fixed deadline the
+[bounded lifecycle](../review-agent/references/lifecycle.md) requires of
+every wait, and past it the driver sends one wrap-up message (SendMessage),
+never a silent wait (observed: a fix-delta reviewer handed two
 implementation briefs, three review reports and the PR thread read whole
 files and traced code one command per turn: 183 turns, a ~485k-token context,
 36 minutes of which its tools took 31 seconds, until the driver told it to
-wrap up).
+wrap up; in a later run, ten reviewers given "about 40 tool calls or 15
+minutes" took 34 to 76 calls and 10 to 18 minutes, the two longest only
+after a wrap-up message, one of them calling itself within budget at 49
+calls; one told to stop at its 40th call returned at 40).
 
 **In heavy, the forked native review can die silently.** `/claude-stock-code-review` forks
 finder subagents and a verifier; on a session model rate limit (`You've reached
@@ -748,11 +752,10 @@ the last commit.
    (`disable-model-invocation`), skill authorization does not chain, and the
    Skill call is refused by design. The checkpoint above already carries the
    user's consent, so the refusal is expected — neither a blocker nor a stop-and-ask.
-   Note that the subagent runs in the session's own worktree, so a report
-   write into a *different* reviewed worktree is refused by the Write tool;
-   hand it the reviewed worktree path and expect the report copied in via
-   Bash (or written under the session worktree, at the location the profile
-   names) rather than treating the refusal as a failed pass.
+   The subagent reads the reviewed worktree it is handed and writes no report
+   file: it returns the whole report in its result, and the driver saves it
+   verbatim at the location the profile names (the desktop app refuses a
+   subagent's report file in any location).
    Follow the skill's capability-based topology and
    [bounded lifecycle](../review-agent/references/lifecycle.md): the parent
    owns completion, child handles and results are tracked, and in heavy a
@@ -766,7 +769,18 @@ the last commit.
 
 Reconcile every finding. Any blocking finding, or a review verdict of `blocked`,
 is a **Final Review gate failure — stop and ask**, then fix and re-run the affected pass
-on the new snapshot, preserving unaffected results with their provenance. A
+on the new snapshot, preserving unaffected results with their provenance.
+A range that reaches the final head after the pass — a finding's fix, an
+amendment, a change the person asks for — gets a cross-provider read before
+its PR goes ready when it is substantial or touches hunks no reviewer has
+read. The driver's own read alone certifies a small follow-up it verifies
+directly: a rebase whose range-diff shows the hunks unchanged, a copy edit, a
+fix of a few lines inside hunks a reviewer has already read. The loop ends
+when a read passes or leaves only such follow-ups (observed: the driver alone
+re-read a last fix round of +257/−79 lines, and the Codex read the person
+then asked for found two P1 in it; on an earlier PR, four passes each found
+one P2 in the previous pass's ~15-line fix, and the person called it running
+in circles). A
 **`REVIEW INCOMPLETE` report also fails the Final Review gate**: if a review leg couldn't finish
 (a backend not logged in, a rate limit, a timeout), do **not** treat the
 degraded result as a pass — **stop and ask** the user how to proceed (accept

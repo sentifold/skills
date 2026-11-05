@@ -238,6 +238,19 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   parallelism, issue several such background calls, each with its own output file. This is
   a genuine push notification with no polling — unlike the plugin's detached, poll-only
   `task --background` (where you must poll `/codex:status`).
+- **A detached run wakes no one.** A run started with `&` inside a foreground call, or
+  through `Popen(..., start_new_session=True)`, outlives the turn but sends no completion
+  notification, and `codex-watch.sh` answers once, so a backgrounded watcher returns at
+  once. Before ending a turn on such a run, start one `Bash(run_in_background: true)` wait
+  whose exit re-invokes you, with a deadline of its own, the run's `--timeout` plus five
+  minutes (`CAP` seconds):
+  `W="$CODEX_SKILL_DIR/scripts/codex-watch.sh"; END=$(( $(date +%s) + CAP )); while [ "$(date +%s)" -lt "$END" ]; do bash "$W" <out.txt> >/dev/null; [ $? -eq 10 ] || break; sleep 20; done; bash "$W" <out.txt>`.
+  The watcher answers 10 for as long as the supervisor lives, and only the supervisor
+  writes `TIMEOUT`, so a stuck supervisor would hold an uncapped wait forever. A last line
+  of `RUNNING` or `QUIET` means the wait hit its own deadline: the run is not done, so
+  check its progress as below, cancel it or report it. Observed in an
+  orchestrate-linked-sessions lane, which had started a write run with `&`: the watcher it
+  backgrounded returned at once, and it wrote a capped wait of its own.
 - **`Reading additional input from stdin...` in the provider output is harmless.** The
   helper closes stdin for argument prompts, so the run proceeds.
 - **Output is buffered; silence ≠ hang.** `codex exec` does not stream — the

@@ -145,8 +145,8 @@ tasks follow the default "smallest direct change" behavior, not this ceremony.
   ends its turn and the app continues it when the lanes report, and a lane
   that needs an answer sooner messages it.
 - **Delegate for isolation, not lower quality.** A lane is a session, not a
-  subagent: it keeps a context of its own across turns, asks the person
-  itself, and hands the driver a line, not its transcript. Inside a session,
+  subagent: it keeps a context of its own across turns and hands the driver
+  a line, not its transcript. Inside a session,
   the main agent holds the big-picture context and hands off well-scoped work
   to native subagents that return compact results. Live app driving / UI
   verification → the tester executor the project profile names for the
@@ -528,19 +528,23 @@ never the implementation briefs, earlier review reports or PR threads they
 came from. It opens code by line range — the function or type enclosing each
 hunk, the call sites and helpers its greps turn up — never a whole source
 file, and batches its reads: one command prints several hunks, not one per
-turn. Give it a budget of ~40 tool calls or ~15 minutes of agent time; one
-that cannot finish within budget returns what it has, ranked as usual, with
-unfinished leads marked unverified and the hunks it never reached named,
-instead of exploring open-endedly. Those hunks go to a fresh reviewer with
-the same brief and budget — the lifecycle's waves — until every hunk has
-had a reader; the gate never passes on an unread hunk. The budget is the fixed
-deadline the [bounded lifecycle](../review-agent/references/lifecycle.md)
-requires of every wait: past it the lane sends one wrap-up message
-(SendMessage), never a silent wait (observed: a fix-delta reviewer handed two
+turn. Give it a budget it can keep itself, 80 tool calls: at the 80th it
+stops and returns what it has, ranked as usual, with unfinished leads marked
+unverified and the hunks it never reached named, instead of exploring
+open-endedly. Those hunks go to a fresh reviewer with the same brief and
+budget — the lifecycle's waves — until every hunk has had a reader; the gate
+never passes on an unread hunk. The clock is the lane's, since a subagent
+keeps none: ~15 minutes from the launch is the fixed deadline the
+[bounded lifecycle](../review-agent/references/lifecycle.md) requires of
+every wait, and past it the lane sends one wrap-up message (SendMessage),
+never a silent wait (observed: a fix-delta reviewer handed two
 implementation briefs, three review reports and the PR thread read whole
 files and traced code one command per turn: 183 turns, a ~485k-token context,
 36 minutes of which its tools took 31 seconds, until the driver told it to
-wrap up).
+wrap up; in a later run, ten reviewers given "about 40 tool calls or 15
+minutes" took 34 to 76 calls and 10 to 18 minutes, the two longest only
+after the lane's wrap-up while a restack waited, one of them calling itself
+within budget at 49 calls; one told to stop at its 40th call returned at 40).
 
 **In heavy, the forked native review can die silently.** `/claude-stock-code-review` forks
 finder subagents and a verifier; on a session model rate limit (`You've reached
@@ -617,6 +621,15 @@ built for one runtime cannot drive another — native tooling cannot drive a
 browser game, a desktop run says nothing about a mobile host). A browser or
 device executor that differs in mechanics still carries the same tiering, time
 budgets, and Reporting Contract.
+
+**A check the person does not watch stays out of their browser.** It runs in
+the lane's built-in browser pane, or headless. The person's own browser
+(Claude in Chrome) serves only a provider's consent page where their session
+lives, opened in a background tab that the lane's state line announces, and
+nobody asks the person to keep a window in front (observed: a lane drove a
+board's whole exercise in the person's Chrome, where a hidden tab loads
+nothing, and the person was asked to keep the window in front, which blocked
+their work).
 
 The lane delegates the live run to the chosen executor, **reproducing a
 clean-state scenario** so stale data cannot mask or fake a pass:
@@ -791,14 +804,12 @@ like a fix.
    (`disable-model-invocation`), skill authorization does not chain, and the
    Skill call is refused by design. The checkpoint above already carries the
    user's consent, so the refusal is expected — neither a blocker nor a stop-and-ask.
-   The subagent runs in the driver's worktree and writes its report there,
-   under the run's evidence path; the lane worktrees it is handed are read,
-   never written — a refused write into one of them is the wrong location,
-   not a failed pass. Where the runtime refuses a subagent's report file in
-   any location (observed in every pass of one run, in the desktop app:
-   "Subagents should return findings as text, not write report files"), the
-   text wins: the subagent returns the whole report in its result, and the
-   driver saves it verbatim at the report path before closure.
+   The subagent runs in the driver's worktree, reads the lane worktrees it
+   is handed and writes no report file: it returns the whole report in its
+   result, and the driver saves it verbatim in the run's folder before
+   closure, because the desktop app refuses a subagent's report file in any
+   location ("Subagents should return findings as text, not write report
+   files"; observed in every pass of two runs).
    Follow the skill's capability-based topology and
    [bounded lifecycle](../review-agent/references/lifecycle.md): the parent
    owns completion, child handles and results are tracked, and in heavy a
@@ -809,7 +820,18 @@ like a fix.
 
 Reconcile every finding. Any blocking finding, or a review verdict of `blocked`,
 is a **Final Review gate failure — stop and ask**, then fix and re-run the affected pass
-on the new snapshot, preserving unaffected results with their provenance. A
+on the new snapshot, preserving unaffected results with their provenance.
+A range that reaches the final head after the pass — a finding's fix, an
+amendment, a change the person asks for — gets a cross-provider read before
+its PR goes ready when it is substantial or touches hunks no reviewer has
+read. The driver's own read alone certifies a small follow-up it verifies
+directly: a rebase whose range-diff shows the hunks unchanged, a copy edit, a
+fix of a few lines inside hunks a reviewer has already read. The loop ends
+when a read passes or leaves only such follow-ups (observed: the driver alone
+re-read a last fix round of +257/−79 lines, and the Codex read the person
+then asked for found two P1 in it; on an earlier PR, four passes each found
+one P2 in the previous pass's ~15-line fix, and the person called it running
+in circles). A
 **`REVIEW INCOMPLETE` report also fails the Final Review gate**: if a review leg couldn't finish
 (a backend not logged in, a rate limit, a timeout), do **not** treat the
 degraded result as a pass — **stop and ask** the user how to proceed (accept
@@ -939,16 +961,29 @@ state line (a lane that closed before it had a PR sends the receipt in that
 message instead); the driver pushes the run's folder — the scope record, the
 design and its validations, the lane briefs, the ledger, every lane's
 receipt, the Final Review report, the closure — to
-`refs/orchestrate/<run>/notes` in the repository, as a commit of that folder
-alone: fetch the ref first (`git fetch origin
-+refs/orchestrate/<run>/notes:refs/orchestrate/<run>/notes`, which fails
-harmlessly before the first push), `git add -f` the folder into a temporary
-`GIT_INDEX_FILE`, `write-tree`, `commit-tree` with the fetched tip as the
-parent when there is one, `update-ref` the local ref, `push origin
-refs/orchestrate/<run>/notes` (a fast-forward: a rejected push means a newer
-tip to fetch and build on, never a force) — when the Design gate passes, at
-each lane's closure and at the run's closure; every PR body links the ref. A
-run whose driver is gone resumes in a new driver session from the ref and
+`refs/orchestrate/<run>/notes` in the repository when the Design gate
+passes, at each lane's closure and at the run's closure, and every PR body
+links the ref. The ref's tree holds the folder's contents at its root, so a
+reader fetches it (`git fetch -f origin
+refs/orchestrate/<run>/notes:refs/orchestrate/<run>/notes`) and reads
+`git show refs/orchestrate/<run>/notes:scope-record.md`. Each commit's parent
+is the remote tip fetched right before that push, never that local ref,
+which every worktree of the repository shares and any fetch into it rewrites
+(observed: a first push carried the whole
+`.local/orchestrate/<run>/` path, and a later one was rejected on a local ref
+gone back to an older tip):
+
+```sh
+IDX=<scratch>/notes-index; rm -f "$IDX"   # a fresh index, never the worktree's
+GIT_INDEX_FILE="$IDX" git add -f .local/orchestrate/<run>
+TREE=$(GIT_INDEX_FILE="$IDX" git write-tree --prefix=.local/orchestrate/<run>/)
+git fetch -f origin refs/orchestrate/<run>/notes:refs/tmp/<run>/notes   # fails before the first push: drop -p
+COMMIT=$(git commit-tree "$TREE" -p refs/tmp/<run>/notes -m "<run>: <what changed>")
+git push origin "$COMMIT":refs/orchestrate/<run>/notes   # never forced: a rejection means fetch and rebuild
+git update-ref -d refs/tmp/<run>/notes
+```
+
+A run whose driver is gone resumes in a new driver session from the ref and
 the PRs. The profile may name another durable place; a repository with no
 remote keeps the ref locally and the closure says so; a worktree is never
 one.
@@ -1043,10 +1078,9 @@ Checkpoint and ask the user when:
 - the Final Review pass reports a cheap/fast tier, cannot identify the effective model, or returns `REVIEW INCOMPLETE`
 - the change has cross-platform risk you cannot verify (no reachable remote target) and the gap is not waived
 
-A gate failure or ambiguity stops **its lane, not the world**, and is asked in
-the session that owns it: a lane posts the checkpoint in its own thread, where
-the person answers it, and tells the driver in one line; the driver never
-re-asks a lane's question, and the other lanes keep running. A decision that
+A gate failure or ambiguity stops **its lane, not the world**: the lane sends
+its checkpoint to the driver and parks, the other lanes keep running, and the
+driver puts it to the person and sends the lane their answer verbatim. A decision that
 could invalidate other lanes too — a scope-wide ambiguity, a shared-contract
 change, a defect the other lanes build on — is the driver's: it halts the
 lanes whose work in flight the answer could invalidate (`stop_session`; a
@@ -1150,10 +1184,16 @@ Lane brief
 - design: <the validated design — owner/surface, files, contract delta, verification — with the counterpart's refinements folded in>
 - owned paths: <this lane's>; other lanes: <lane: paths>
 - done proof: <the tests to run, the Live Test tier with its reason and executor, the readiness floor>
+- standing rules: <the rules of the project's instructions and of the person's own, their words in this run included, that bear on this lane — e.g. which tests need whose approval and how to ask for it>
 - codex: <model, effort and sandbox from the profile's Provider policy; `--network` when the tests need it>
 - driver: <this session's id (`get_session` with `self`), where every changed state line goes; its PROJECT_ROOT, for the run's evidence paths>
 - rules: read `<SKILL_DIR>/SKILL.md`, "Running a lane", before anything else; then the profile, AGENTS.md and the laws from your own worktree
 ```
+
+`standing rules` carries what the person has already settled, so no lane
+needs it said again (observed: the person's standing rule that a clean head
+merges as it is when main moves, with no new local verification, was in no
+brief, and they typed it into a lane themselves).
 
 ### Running a lane
 
@@ -1171,11 +1211,16 @@ instructions; this file is its contract. Its order:
    `github-create-pr` skill); the app's PR monitor follows this session.
 3. **Gates**: the Code Review gate per phase 4, the Live Test gate per phase
    5, then the readiness floor the profile names, on the final head.
-4. **Report.** Every turn ends with one state line first, then the rest;
-   the same state line goes to the driver's session id by message when
-   anything in it changed since the last one sent — phase, status, head, PR,
-   what it waits for — or a request of the driver's is done, and otherwise
-   not at all:
+4. **Report.** Every turn ends with one state line first, then a recap with
+   no question to the person, in the app's next-step box too: what the lane
+   needs from the person goes to the driver with its state line, and the
+   driver's message with their answer starts the lane's next turn
+   (observed: lanes' boxes kept showing questions the person had already
+   answered through the driver, and the person, seeing them, asked the
+   driver why it had not passed them on). The state line goes to the
+   driver's session id by message when anything in it changed since the
+   last one sent — phase, status, head, PR, what it waits for — or a request
+   of the driver's is done, and otherwise not at all:
    `<lane>: <phase> — <ran:|blocked:|degraded:|not-applicable:> …; head <sha>; PR <url|none>; waits for <nothing|person|driver|lane X>`.
    The receipt lives at `.local/orchestrate/<lane>/receipt.md` in this
    worktree, in the closure's tagged form, with the ranges no first-order
@@ -1201,12 +1246,19 @@ turns are for decisions, the verification of review candidates, commits and
 reports (observed: lanes that drove their live tests themselves ran to a
 thousand turns, their reviewers' candidates buried among browser probes).
 
+**Nothing in flight without a wake-up.** A lane ends a turn only when what
+it started will continue it on finishing: a background task
+(`run_in_background`) or a subagent does; a run started with `&`, or
+detached otherwise, does not, so it first gets a background wait — the
+`codex` skill's [runtime notes](../codex/references/runtime-findings.md)
+give one (observed: a lane started a Codex write run with `&`, which no
+notification follows, and found out only when nudged).
+
 A lane never edits outside its worktree; never changes its slice — a scope
 question goes to the driver by message, and the lane parks; never merges,
 deploys or publishes; never starts sessions of its own; and never asks the
-person what the driver owns (scope, models, the merge). It does ask the person
-about its own gate failures, in the checkpoint shape, in its own thread, after
-telling the driver in one line.
+person anything: its own gate failures, too, go to the driver in the
+checkpoint shape, and the lane parks until the answer comes back.
 
 Messages it answers: `go` (start the warm build, then the code, or after a
 `pause` carry on from where it stopped; when it

@@ -18,9 +18,9 @@ child per selected lens, or `general-purpose` where that def is absent, with
 your own Agent tool), run the
 cross-provider leg through the installed sibling provider helper with the model
 and effort the skill's Provider policy resolves, validate and merge findings from
-both legs, write the report file only where the user or project contract asks
-for one, and return the skill's result contract (`REVIEW COMPLETE …` /
-`REVIEW INCOMPLETE …`).
+both legs, and return the whole report under the skill's result contract
+(`REVIEW COMPLETE …` / `REVIEW INCOMPLETE …`); write no report file, the
+caller saves it.
 
 Follow the capability-based topology and bounded lifecycle. The tools actually
 exposed to this run determine whether nested agents or messaging are available.
@@ -32,5 +32,5 @@ Collect actual child/provider results; a notification or “children are
 running” is not a review, and you do not end your turn while a child is still
 working. At a deadline report missing coverage and owned-job disposition. You
 are read-only with respect to the source tree: findings are reported, never
-auto-fixed; a requested report artifact is your only write. Do not publish
-reports automatically.
+auto-fixed, and the caller saves any report file. Do not publish reports
+automatically.
