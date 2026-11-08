@@ -249,8 +249,15 @@ Read the sibling provider skill before invoking its helper. From Codex use
 `$SKILLS_ROOT/claude/scripts/claude-ephemeral.sh`; from Claude use
 `$SKILLS_ROOT/codex/SKILL.md` and
 `$SKILLS_ROOT/codex/scripts/codex-ephemeral.sh`. Do not look for those files in
-the target repository. Use `--cd "$PROJECT_ROOT"` and an absolute, unused
-`--out` path in a fresh private temporary directory. Judge whether the leg
+the target repository. Use `--cd` naming a checkout whose working tree is the
+reviewed snapshot, because the leg opens the files it reads there:
+`PROJECT_ROOT` when its tree is that snapshot, else a clean checkout of the
+scope's head — a worktree the caller handed in that holds it, or a temporary
+`git worktree add --detach <dir> <head>` in a private temporary directory,
+removed after the leg (observed: the three passes of one run each moved the
+leg to a lane's clean worktree on their own, because the root they were given
+was a driver's worktree on another branch). Use an absolute, unused `--out`
+path in a fresh private temporary directory. Judge whether the leg
 landed from the helper's receipt (`status`, `diagnostic`, the result file), not
 from the exit code alone. Pass prompt text without shell interpolation hazards;
 follow the selected helper's supported arguments.
