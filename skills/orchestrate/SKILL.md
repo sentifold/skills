@@ -650,13 +650,12 @@ coverage gaps and cannot be silently counted as automated passes.
 **A round made during the live test is read before anything runs on it.** A
 fix for a live finding and a change the person asks for after seeing the
 product are fix rounds like a review's: once a round changes behavior, commit
-it and run phase 4's fix-delta check over that round's own delta — in light,
-the reviewer subagent and the cross-provider pass — before a release, the
-retest or a gate takes it; fixing what the check finds starts no further
-round, as there (observed: four rounds made during one live test went to the
-shared test stage with no read of their own; one passed an `undefined` option
-that a client library's constructor rejects and broke a view that had worked,
-and the catch-up read found it and three more gaps).
+it and give its own delta the checks phase 4 gives a fix round before a
+release, the retest or a gate takes it; fixing what they find starts no
+further round, as there (observed: four rounds made during one live test went
+to the shared test stage with no read of their own; one passed an `undefined`
+option that a client library's constructor rejects and broke a view that had
+worked, and the catch-up read found it and three more gaps).
 
 ### 5a — Platform host verification (conditional) — **Platform gate**
 
@@ -775,14 +774,13 @@ the last commit.
    running" as though that were the report. A sequential native fallback
    must state its reduced independence.
    An orchestrator stopped by a spend or rate limit (HTTP 429, "You've hit
-   your … limit") is resumed, not relaunched: tell the person, and once the
-   limit is lifted or has reset, resume the same subagent by message, as
-   review-agent's "Resuming an interrupted run" says. A relaunch repeats the
-   cross-provider work it finished, and one on another model changes the
-   review's engine, which only the person chooses (observed: a light pass
-   stopped between launching its Codex chunks and collecting them; after the
-   top-up one message resumed it, and it collected every chunk, none run
-   twice).
+   your … limit") is an interrupted run: tell the person, and once the limit
+   is lifted or has reset, recover it as review-agent's "Resuming an
+   interrupted run" says, on the same model. A relaunch repeats the
+   cross-provider work it finished, and another model overrides the person's
+   choice (observed: a light pass stopped between launching its Codex chunks
+   and collecting them; after the top-up one message resumed it, and it
+   collected every chunk, none run twice).
 4. **The optional extra-engine pass** ([Extra engines](#extra-engines-optional)),
    launched alongside the `review-agent` pass over the same scope, in light
    and heavy. Skip it when no extra engine is installed.
