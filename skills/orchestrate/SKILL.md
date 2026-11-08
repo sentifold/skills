@@ -647,6 +647,16 @@ and the proposed fix before iterating. A central `needs-human` assertion also
 stops the gate for a human verdict; secondary `Needs human eyes` items stay explicit
 coverage gaps and cannot be silently counted as automated passes.
 
+**A round made during the live test is read before anything runs on it.** A
+fix for a live finding and a change the person asks for after seeing the
+product are fix rounds like a review's: once a round changes behavior, commit
+it and give its own delta the checks phase 4 gives a fix round before a
+release, the retest or a gate takes it; fixing what they find starts no
+further round, as there (observed: four rounds made during one live test went
+to the shared test stage with no read of their own; one passed an `undefined`
+option that a client library's constructor rejects and broke a view that had
+worked, and the catch-up read found it and three more gaps).
+
 ### 5a — Platform host verification (conditional) — **Platform gate**
 
 Run this per scope, after the Live Test gate, **only when the change reaches a
@@ -763,6 +773,14 @@ the last commit.
    collection (`NEEDS_PARENT_FANOUT`). Never finish with "children are
    running" as though that were the report. A sequential native fallback
    must state its reduced independence.
+   An orchestrator stopped by a spend or rate limit (HTTP 429, "You've hit
+   your … limit") is an interrupted run: tell the person, and once the limit
+   is lifted or has reset, recover it as review-agent's "Resuming an
+   interrupted run" says, on the same model. A relaunch repeats the
+   cross-provider work it finished, and another model overrides the person's
+   choice (observed: a light pass stopped between launching its Codex chunks
+   and collecting them; after the top-up one message resumed it, and it
+   collected every chunk, none run twice).
 4. **The optional extra-engine pass** ([Extra engines](#extra-engines-optional)),
    launched alongside the `review-agent` pass over the same scope, in light
    and heavy. Skip it when no extra engine is installed.
@@ -850,7 +868,7 @@ stacked above it.
 |------|-------|-------------------|------------|
 | **Design** | per sub-task | Design cross-provider-validated before code, or honestly recorded as `adopted-existing-work` | **stop & ask**, then revise the plan |
 | **Code Review** | per sub-task | Native + cross-provider reviews agree; simplification applied or recorded `folded-into-review` | **stop & ask**, then iterate on the code |
-| **Live Test** | per PR | Risk-sized (`not-applicable:` / boot smoke / full exercise, reason recorded); clean-state executor returns a decisive `pass`; no central assertion is `needs-human` | **stop & ask**, then fix & retest |
+| **Live Test** | per PR | Risk-sized (`not-applicable:` / boot smoke / full exercise, reason recorded); clean-state executor returns a decisive `pass`; no central assertion is `needs-human` | **stop & ask**, then fix, read the fix delta, retest |
 | **Platform** | per scope, conditional | Simulator/emulator boot/render via the profile's host executor when the change reaches a profile-defined host surface, plus a real-device run for hardware-only questions (performance, memory, GPU features, touch); otherwise `not-applicable:` | **stop & ask**, then fix & re-run |
 | **Performance** | per scope, conditional | Before/after capture via the profile's profiling route when the change touches a performance-critical surface; no unjustified p95/p99/hitch regression | **stop & ask** with both captures |
 | **Final Review** | whole scope, once per repo | Delivered work matches the intake scope record; `review-agent` returns `REVIEW COMPLETE` with both strong-model legs complete | **stop & ask**, then fix & re-run |
