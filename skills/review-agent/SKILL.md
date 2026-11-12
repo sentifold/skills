@@ -256,7 +256,10 @@ scope's head — a worktree the caller handed in that holds it, or a temporary
 `git worktree add --detach <dir> <head>` in a private temporary directory,
 removed after the leg (observed: the three passes of one run each moved the
 leg to a lane's clean worktree on their own, because the root they were given
-was a driver's worktree on another branch). Use an absolute, unused `--out`
+was a driver's worktree on another branch). A plain copy of the snapshot's
+files is not such a checkout: `git` run in it reads the enclosing repository
+(observed: a Final Review handed its leg copies under the driver's worktree,
+whose HEAD was `main`). Use an absolute, unused `--out`
 path in a fresh private temporary directory. Judge whether the leg
 landed from the helper's receipt (`status`, `diagnostic`, the result file), not
 from the exit code alone. Pass prompt text without shell interpolation hazards;

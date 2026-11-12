@@ -425,7 +425,9 @@ and never runs git there; a lane never writes into another lane's or the
 driver's — the Write and Edit tools refuse such paths anyway ("belongs to a
 different worktree"). A fix another lane needs, a restack, a revert, a re-run:
 all travel as a message to the session that owns the worktree, which does it
-and reports the new head.
+and reports the new head. A change goes to one lane, once, as final (observed:
+a one-word fix moved to another lane's PR by a second message crossed the
+first lane's push: a revert, an extra push and gate).
 
 **Check work in flight on the same surface before the Design gate.** Another session may already own
 part of the scope (observed: a sibling PR adding the same asset surfaced only in a live-test
