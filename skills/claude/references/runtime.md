@@ -56,10 +56,13 @@ atomic `receipt.json`, raw provider stdout/stderr (`provider.stdout`,
 `provider.stderr`), preflight evidence and `result.txt`. Only the supervisor
 writes lifecycle stdout. Receipts record run ID, selected executable/version,
 phase, timestamps, `deadline_at` (wall clock, informational) and
-`deadline_remaining` (monotonic; the supervisor's own clock decides a timeout),
-child PID, exit status, output path and SHA-256. Usage errors (`--out` exists,
-unreadable `--output-schema`, terminal stdin with no prompt) exit 2 before any
-run directory or lifecycle line exists.
+`deadline_remaining` (the seconds left on the supervisor's monotonic clock as of
+the receipt's last write; that clock alone decides a timeout), child PID, exit
+status, output path and SHA-256. The supervisor writes the receipt at each step
+of the run, never on a timer, so `deadline_remaining` does not count down while
+the provider runs: whether the run is alive is the watcher's to say (below).
+Usage errors (`--out` exists, unreadable `--output-schema`, terminal stdin with
+no prompt) exit 2 before any run directory or lifecycle line exists.
 Existing `--out` files are rejected. A new destination is exclusively reserved;
 failure removes that empty reservation, and success atomically publishes the
 validated result. Old output cannot become a new run's result.

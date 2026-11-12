@@ -79,10 +79,14 @@ writes lifecycle stdout: `CODEX_RUN_START` and `CODEX_RUN_EXIT` followed by JSON
 with `run_id` and `receipt`. Model text cannot supply control records. The
 receipt records the selected executable (`cli`) and version string (`cli_version`),
 status, exit code, output path, result digest, the child PID, `deadline_at` (wall
-clock, informational) and `deadline_remaining` (the supervisor's monotonic clock,
-which alone decides a timeout). It also records the `model` and `reasoning_effort`
-that `codex exec` reports in the settings header at the top of its stderr, so a
-provider policy can be checked from the receipt alone; both are absent when the
+clock, informational) and `deadline_remaining` (the seconds left on the
+supervisor's monotonic clock as of the receipt's last write; that clock alone
+decides a timeout). The supervisor writes the receipt at each step of the run,
+never on a timer, so `deadline_remaining` does not count down while the provider
+runs: whether the run is alive is the watcher's to say (below). The receipt also
+records the `model` and `reasoning_effort` that `codex exec` reports in the
+settings header at the top of its stderr, so a provider policy can be checked
+from the receipt alone; both are absent when the
 CLI prints no such header. A failed provider run records `provider_error` only
 when the provider printed nonempty `ERROR:` lines in the last 64 KiB of its stderr
 (deduplicated, the last three, each cut to 300 characters). Its `diagnostic` then
