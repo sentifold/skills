@@ -257,16 +257,9 @@ scope's head — a worktree the caller handed in that holds it, or a temporary
 removed after the leg (observed: the three passes of one run each moved the
 leg to a lane's clean worktree on their own, because the root they were given
 was a driver's worktree on another branch). A plain copy of the snapshot's
-files inside another checkout serves file reads only: `git` there reaches the
-enclosing repository, whose HEAD, index and working tree are not the snapshot,
-and resolves paths from the copy's own directory, which no commit holds, so a
-one-SHA `git diff` reads the wrong tree and a bare pathspec or `git grep` finds
-nothing, all silently. Prefer the detached worktree; for a copy, the prompt says
-so and either tells the leg to run no `git` there or has it run every `git`
-command from the enclosing root (`git -C <root>`) naming the reviewed commits —
-both SHAs for a `git diff`, never HEAD, the index or the working tree (observed:
-a Final Review handed its leg plain copies under the driver's worktree, whose
-HEAD was `main`). Use an absolute, unused `--out`
+files is not such a checkout: `git` run in it reads the enclosing repository
+(observed: a Final Review handed its leg copies under the driver's worktree,
+whose HEAD was `main`). Use an absolute, unused `--out`
 path in a fresh private temporary directory. Judge whether the leg
 landed from the helper's receipt (`status`, `diagnostic`, the result file), not
 from the exit code alone. Pass prompt text without shell interpolation hazards;
