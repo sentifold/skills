@@ -126,7 +126,11 @@ The **orchestrator** owns the whole run:
    parent from that branch; `--include-worktree` adds current tracked and
    untracked changes to a branch scope. Default branch mode reports excluded
    dirty paths explicitly. Record the resolved commit IDs, `base_upstream`,
-   warnings, and snapshot digest; hand the same IDs to every reviewer. The
+   warnings, snapshot digest, and `changed_count`; hand the same IDs to every
+   reviewer. Quote `changed_count` — the length of `changed_paths`, a rename
+   counting both its paths — wherever a prompt or report states the scope's
+   size, never a hand count (observed: a Final Review told its cross-provider
+   leg 72 paths for a range of 73). The
    helper excludes Git-ignored files; review those separately if explicitly in
    scope. Dirty submodules require their own snapshots because a parent gitlink
    does not fingerprint their contents. Do not fetch or mutate Git merely to
