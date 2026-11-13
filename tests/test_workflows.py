@@ -72,7 +72,9 @@ class ReviewScopeTests(unittest.TestCase):
             self.assertEqual(result.stdout, "")
             return result.stderr
         self.assertEqual(result.returncode, 0, result.stderr)
-        return json.loads(result.stdout)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["changed_count"], len(report["changed_paths"]))
+        return report
 
     def test_default_remote_branch_and_cwd_are_not_assumed(self):
         result = self.scope()
@@ -81,6 +83,10 @@ class ReviewScopeTests(unittest.TestCase):
         self.assertEqual(result["base_commit"], self.initial)
         self.assertEqual(result["head_commit"], self.feature)
         self.assertEqual(result["changed_paths"], ["feature.txt"])
+
+    def test_empty_scope_reports_a_zero_count(self):
+        empty = self.scope("--mode", "uncommitted")
+        self.assertEqual((empty["changed_paths"], empty["changed_count"]), ([], 0))
 
     def test_stacked_parent_config_overrides_remote_default(self):
         self.git("branch", "stack-parent")
@@ -121,12 +127,15 @@ class ReviewScopeTests(unittest.TestCase):
         result = self.scope()
         self.assertFalse(result["includes_worktree"])
         self.assertEqual(result["changed_paths"], ["feature.txt"])
+        self.assertEqual(result["changed_count"], 1)
         self.assertEqual(result["excluded_dirty_paths"], ["base.txt", "untracked name.txt"])
         all_changes = self.scope("--include-worktree")
         self.assertEqual(all_changes["changed_paths"], ["base.txt", "feature.txt", "untracked name.txt"])
+        self.assertEqual(all_changes["changed_count"], 3)
         self.assertEqual(all_changes["excluded_dirty_paths"], [])
         dirty = self.scope("--mode", "uncommitted")
         self.assertEqual(dirty["changed_paths"], ["base.txt", "untracked name.txt"])
+        self.assertEqual(dirty["changed_count"], 2)
         self.assertEqual(dirty["base_commit"], self.feature)
         self.assertEqual((self.repo / ".git/index").read_bytes(), index)
 
@@ -179,6 +188,7 @@ class ReviewScopeTests(unittest.TestCase):
         self.git("commit", "-qm", "rename")
         plain = self.scope()
         self.assertEqual(plain["changed_paths"], ["base.txt", "feature.txt", "renamed.txt"])
+        self.assertEqual(plain["changed_count"], 3)  # a rename counts both of its paths
         self.git("config", "diff.renames", "true")
         self.git("config", "diff.noprefix", "true")
         self.git("config", "diff.algorithm", "patience")
