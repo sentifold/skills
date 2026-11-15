@@ -588,7 +588,10 @@ performance; one does not prove the others.
 
 A smoke that surfaces anything doubtful escalates to the full exercise — never
 to a shrug. Do not stretch a low tier over a risky change to save time; the
-tier claim is part of the gate evidence.
+tier claim is part of the gate evidence. A stand-in for a third-party SDK
+proves nothing about how its real module loads: run the real module against a
+fake of its host (observed: every stand-in hid a default export on which a
+dynamic import never settled).
 
 **Pick the live-test executor by product surface** from the project profile's
 "Verification by changed surface" table (learned the hard way: an executor

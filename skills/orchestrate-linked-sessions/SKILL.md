@@ -320,7 +320,10 @@ proposing new ones, consider a simpler alternative, and justify the choice
 from the code. Then **validate the design before writing any
 code** with the cross-provider counterpart in read-only mode: the driver uses
 the **`codex` skill**. Hand it the approach and the files to read, and ask it to flag wrong owners, missed contracts,
-simpler alternatives, and risks.
+simpler alternatives, and risks. A second integration of an existing kind
+keeps the first one's laws: the design names each departure and who decided
+it (observed: a law the driver drew from the second service's SDK was
+withdrawn by the person after five lanes had built on it).
 
 Design gate validations are read-only and independent of each other, so **launch them as
 one batch** — one backgrounded cross-provider run per sub-task, each with its
@@ -427,7 +430,9 @@ different worktree"). A fix another lane needs, a restack, a revert, a re-run:
 all travel as a message to the session that owns the worktree, which does it
 and reports the new head. A change goes to one lane, once, as final (observed:
 a one-word fix moved to another lane's PR by a second message crossed the
-first lane's push: a revert, an extra push and gate).
+first lane's push: a revert, an extra push and gate). A lane in a turn gets
+one message at a time, the next after its answer, since messages wait for the
+turn's end (observed: five crossed in twenty minutes).
 
 **Check work in flight on the same surface before the Design gate.** Another session may already own
 part of the scope (observed: a sibling PR adding the same asset surfaced only in a live-test
@@ -573,7 +578,10 @@ calling the gate.
 
 **Proceed only when the native and cross-provider reviews agree the solution is
 sound.** Reconcile every finding with concrete code evidence; fix actionable
-in-scope defects, then repeat only the affected checks. In light that is one
+in-scope defects, then repeat only the affected checks. A claim about what an
+outside service does or refuses stays PLAUSIBLE until probed or cited
+(observed: one recorded as confirmed carried a decision of the driver's until
+the Final Review found it false). In light that is one
 fix-delta check once the fixes change behavior: commit the fixes, then a fresh
 reviewer subagent, scoped and budgeted as above, over
 `<reviewed-head>..HEAD` and the enclosing functions, given the verified list
@@ -615,7 +623,10 @@ performance; one does not prove the others.
 
 A smoke that surfaces anything doubtful escalates to the full exercise — never
 to a shrug. Do not stretch a low tier over a risky change to save time; the
-tier claim is part of the gate evidence.
+tier claim is part of the gate evidence. A stand-in for a third-party SDK
+proves nothing about how its real module loads: run the real module against a
+fake of its host (observed: every stand-in hid a default export on which a
+dynamic import never settled).
 
 **Pick the live-test executor by product surface** from the project profile's
 "Verification by changed surface" table (learned the hard way: an executor
@@ -632,6 +643,14 @@ nobody asks the person to keep a window in front (observed: a lane drove a
 board's whole exercise in the person's Chrome, where a hidden tab loads
 nothing, and the person was asked to keep the window in front, which blocked
 their work).
+
+**A sitting at the person's machine comes last.** First the cheapest proof
+that needs no person, offered to them when it touches a secret; then a
+sitting that starts on a message that they are there, never on a general
+`go`, its plan naming every press that will be theirs (observed: a lane began
+in the person's client before they were there, two promised presses became
+five in tabs the lane could not reach, and a check that two requests to the
+service then settled ran in circles for half an hour).
 
 The lane delegates the live run to the chosen executor, **reproducing a
 clean-state scenario** so stale data cannot mask or fake a pass:
@@ -908,7 +927,10 @@ nothing it has not read there.
 **Never
 auto-merge**: readying PRs is the orchestrator's job, merging is the user's.
 A review or implementation request alone never implies merge, deployment,
-external report publication, or messages to teammates.
+external report publication, or messages to teammates, and a general word to
+land is not the word for a production deploy: the driver asks for that as its
+own question before announcing the step (observed: the driver announced a
+production deploy on a general word to land, and the lane refused it).
 Report the ready PRs and merge only on explicit instruction, then follow the
 chain mechanics below. Confirm the body still reflects the whole branch, in the
 `github-create-pr` body shape, with `## Testing` naming the actual clean-state
@@ -967,7 +989,9 @@ slot, a new head or a finished lane must not wait for the others; a turn that
 changed none of that sends none, the app's note is enough, and every message
 starts a turn of the driver's — and the driver answers by the lane's session
 id. Anything in a lane's worktree — a restack, a revert, a re-run — the
-driver asks of the lane by message and never does there.
+driver asks of the lane by message and never does there. Every stamp in a
+record comes from `date -u` in the command that writes it (observed: local
+times labelled UTC, then stamps written from estimate, fifteen minutes ahead).
 
 **Evidence outlives the worktree.** The app hands an archived session's
 worktree folder to a new session, so `.local/` is scratch and a path into it
@@ -1107,7 +1131,10 @@ lanes whose work in flight the answer could invalidate (`stop_session`; a
 message reaches a busy lane only when its turn ends), sends `pause` to the
 rest and waits for their `paused` state lines, then asks. Batch every
 decision pending at the driver into that one checkpoint — one round-trip, not
-one ask per lane.
+one ask per lane. A reading that contradicts what the person says they did is
+first a question about the reading (observed: a lane's reloads of a form
+cleared the tick the person had set, and the driver asked them four times to
+set it).
 
 Checkpoint shape:
 

@@ -189,7 +189,10 @@ The **orchestrator** owns the whole run:
    - **Cross-provider leg**: one holistic session on the other engine, given
      the same scope, the same selected lens doc paths plus the project
      overrides, and the same instruction to read the common doc first and
-     resolve the diff itself. Tell it to run plain `git diff` / `git show` /
+     resolve the diff itself. Hand it the change's stated limitations, each
+     PR description's included (observed: given only the design's, a leg
+     reported a limitation a PR had stated as a finding). Tell it to run
+     plain `git diff` / `git show` /
      `git log` forms from the repo root — where a project's wrappers
      pre-approve only those exact forms, variants like `git -C <path> diff`
      fail closed and waste the run. See "Cross-provider leg" below for the
@@ -207,7 +210,7 @@ The **orchestrator** owns the whole run:
    certify the newer tree with stale results.
 7. **Report.** Return the whole report directly to the caller: finding
    counts by severity, every verified finding, lens selection with one-line
-   rationale, and legs status (effective model, effort, turns, failures).
+   rationale, and legs status (effective model, effort, duration, failures).
    Write no report file: where the user or the target project contract asks
    for one, the caller saves the returned report verbatim at a local path it
    selects, because the desktop app refuses a subagent's report file in any
@@ -224,9 +227,12 @@ The **orchestrator** owns the whole run:
 
 The orchestrator is read-only with respect to the source tree: findings are
 reported, never auto-fixed, and the caller saves any report file. For a very
-large diff, split it into subsystem-aligned chunks, repeat steps 3–5 per
-chunk, and state chunk coverage in the report instead of doing one shallow
-pass.
+large diff (more than a leg reads within a chunk's
+[budget](references/lifecycle.md)), split it into subsystem-aligned chunks,
+repeat steps 3–5 per chunk, and state chunk coverage in the report instead of
+doing one shallow pass. A scope whose ranges end at different heads is chunked
+by head, since a leg's `--cd` holds one (observed: two lanes at different
+heads, then a stack with two tops, had no single checkout for the leg).
 
 ### Resuming an interrupted run
 
@@ -256,18 +262,22 @@ Read the sibling provider skill before invoking its helper. From Codex use
 the target repository. Use `--cd` naming a checkout whose working tree is the
 reviewed snapshot, because the leg opens the files it reads there:
 `PROJECT_ROOT` when its tree is that snapshot, else a clean checkout of the
-scope's head — a worktree the caller handed in that holds it, or a temporary
+scope's head — a worktree the caller handed in that holds it and that no
+session works in, or a temporary
 `git worktree add --detach <dir> <head>` in a private temporary directory,
 removed after the leg (observed: the three passes of one run each moved the
 leg to a lane's clean worktree on their own, because the root they were given
-was a driver's worktree on another branch). A plain copy of the snapshot's
+was a driver's worktree on another branch; later a lane still at work switched
+one to another branch before the launch). A plain copy of the snapshot's
 files is not such a checkout: `git` run in it reads the enclosing repository
 (observed: a Final Review handed its leg copies under the driver's worktree,
 whose HEAD was `main`). Use an absolute, unused `--out`
 path in a fresh private temporary directory. Judge whether the leg
 landed from the helper's receipt (`status`, `diagnostic`, the result file), not
 from the exit code alone. Pass prompt text without shell interpolation hazards;
-follow the selected helper's supported arguments.
+follow the selected helper's supported arguments. Ask the leg open questions,
+never a hypothesis to confirm (observed: a leading check produced a finding
+the orchestrator then dropped).
 
 On a narrow pass — a re-run after fixes or the first-order fallback over
 caller-named ranges — the prompt names the files and line regions the leg reads:
