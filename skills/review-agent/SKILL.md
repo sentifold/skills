@@ -189,10 +189,10 @@ The **orchestrator** owns the whole run:
    - **Cross-provider leg**: one holistic session on the other engine, given
      the same scope, the same selected lens doc paths plus the project
      overrides, and the same instruction to read the common doc first and
-     resolve the diff itself. Hand it the change's stated limitations, every
-     PR description's as well as the design's (observed: a leg handed only
-     the design's accepted consequences reported a PR's other stated
-     limitation as a finding). Tell it to run plain `git diff` / `git show` /
+     resolve the diff itself. Hand it the change's stated limitations, each
+     PR description's included (observed: given only the design's, a leg
+     reported a limitation a PR had stated as a finding). Tell it to run
+     plain `git diff` / `git show` /
      `git log` forms from the repo root — where a project's wrappers
      pre-approve only those exact forms, variants like `git -C <path> diff`
      fail closed and waste the run. See "Cross-provider leg" below for the
@@ -227,14 +227,12 @@ The **orchestrator** owns the whole run:
 
 The orchestrator is read-only with respect to the source tree: findings are
 reported, never auto-fixed, and the caller saves any report file. For a very
-large diff — one a leg could not read within the budget the
-[lifecycle](references/lifecycle.md) gives a chunk — split it into
-subsystem-aligned chunks, repeat steps 3–5 per chunk, and state chunk coverage
-in the report instead of doing one shallow pass. A scope whose ranges end at
-different heads (independent lanes, a stack with two tops) is chunked by head,
-since a leg's `--cd` holds one snapshot (observed: two lanes at different
-heads needed a leg each, and a stack with two tops had no single checkout to
-hand one).
+large diff (more than a leg reads within a chunk's
+[budget](references/lifecycle.md)), split it into subsystem-aligned chunks,
+repeat steps 3–5 per chunk, and state chunk coverage in the report instead of
+doing one shallow pass. A scope whose ranges end at different heads is chunked
+by head, since a leg's `--cd` holds one (observed: two lanes at different
+heads, then a stack with two tops, had no single checkout for the leg).
 
 ### Resuming an interrupted run
 
@@ -264,29 +262,22 @@ Read the sibling provider skill before invoking its helper. From Codex use
 the target repository. Use `--cd` naming a checkout whose working tree is the
 reviewed snapshot, because the leg opens the files it reads there:
 `PROJECT_ROOT` when its tree is that snapshot, else a clean checkout of the
-scope's head — a worktree the caller handed in that holds it while no session
-works there, or a temporary
+scope's head — a worktree the caller handed in that holds it and that no
+session works in, or a temporary
 `git worktree add --detach <dir> <head>` in a private temporary directory,
 removed after the leg (observed: the three passes of one run each moved the
 leg to a lane's clean worktree on their own, because the root they were given
-was a driver's worktree on another branch; in a later run a lane switched
-such a worktree to another branch between the check and the launch, which
-cost one cancelled attempt). A plain copy of the snapshot's
+was a driver's worktree on another branch; later a lane still at work switched
+one to another branch before the launch). A plain copy of the snapshot's
 files is not such a checkout: `git` run in it reads the enclosing repository
 (observed: a Final Review handed its leg copies under the driver's worktree,
-whose HEAD was `main`). Where no worktree may be added, the leg runs in any
-checkout of the repository and reads the head's objects alone,
-`git show "${HEAD_SHA}:<path>"` (braced, since zsh takes
-`$SHA:a…` for a modifier), and its prompt says so (observed: a pass whose brief
-allowed no writes ran its leg that way to a complete result). Use an
-absolute, unused `--out`
+whose HEAD was `main`). Use an absolute, unused `--out`
 path in a fresh private temporary directory. Judge whether the leg
 landed from the helper's receipt (`status`, `diagnostic`, the result file), not
 from the exit code alone. Pass prompt text without shell interpolation hazards;
 follow the selected helper's supported arguments. Ask the leg open questions,
-never a hypothesis to confirm: a leg handed one tends to return it confirmed
-(observed: one leading check in a prompt produced a finding the orchestrator
-then dropped).
+never a hypothesis to confirm (observed: a leading check produced a finding
+the orchestrator then dropped).
 
 On a narrow pass — a re-run after fixes or the first-order fallback over
 caller-named ranges — the prompt names the files and line regions the leg reads:

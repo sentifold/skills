@@ -81,11 +81,10 @@ receipt records the selected executable (`cli`) and version string (`cli_version
 status, exit code, output path, result digest, the child PID, `deadline_at` (wall
 clock, informational) and `deadline_remaining` (time left on the supervisor's
 monotonic clock, which alone decides a timeout, as of the receipt's last write:
-not a live countdown). It also records the `model`, `reasoning_effort`,
-`sandbox` and `approval` that `codex exec` reports in the settings header at the
-top of its stderr, so a provider policy can be checked from the receipt alone;
-each is absent when the header does not carry it. A failed provider run records
-`provider_error` only
+not a live countdown). It also records the `model` and `reasoning_effort`
+that `codex exec` reports in the settings header at the top of its stderr, so a
+provider policy can be checked from the receipt alone; both are absent when the
+CLI prints no such header. A failed provider run records `provider_error` only
 when the provider printed nonempty `ERROR:` lines in the last 64 KiB of its stderr
 (deduplicated, the last three, each cut to 300 characters). Its `diagnostic` then
 opens with it, so a caller can tell a transient refusal — `Selected model is at

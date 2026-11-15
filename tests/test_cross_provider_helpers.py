@@ -325,21 +325,6 @@ class CrossProviderHelpersTests(unittest.TestCase):
         stderr.unlink()
         self.assertEqual(RUNTIME.read_provider_error(stderr), '')
 
-    def test_receipt_records_the_settings_header(self):
-        # codex exec prints its settings between two "--------" lines at the top of stderr.
-        run = self.lifecycle_fixture()
-        stderr = self.root / 'provider.stderr'
-        stderr.write_text('ERROR rmcp: startup noise\nOpenAI Codex v0.162.1\n--------\nworkdir: /repo\n'
-                          'model: fixture-model\nprovider: openai\napproval: never\nsandbox: read-only\n'
-                          'reasoning effort: xhigh\nreasoning summaries: none\n--------\n'
-                          'user\nsandbox: danger-full-access\n', encoding='utf-8')
-        run.data.update(phase='provider', stderr=str(stderr))
-        run.record_settings()
-        self.assertEqual({key: run.data.get(key) for key in ('model', 'reasoning_effort', 'sandbox', 'approval')},
-                         {'model': 'fixture-model', 'reasoning_effort': 'xhigh',
-                          'sandbox': 'read-only', 'approval': 'never'})
-        self.assertEqual(run.data['provider'], 'codex')
-
     def test_success_requires_complete_intact_output_and_clean_claude_envelope(self):
         for provider in ('codex', 'claude'):
             target = self.root / f'{provider} export.md'

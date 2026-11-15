@@ -8,11 +8,10 @@ Before dispatch, record a run ledger in working context: repository, scope
 IDs/digest, selected lens paths, each child or provider job handle, owner,
 start, deadline, last observed state, and result.
 Choose an overall budget before launching: honor a user/project budget; absent
-one use 30 minutes per chunk (an unchunked scope is one), and give each
-provider helper a `--timeout` that leaves part of it for validation, since the
-helper's own read-only default, 1800 s, is all of it (observed: chunks of
-180–750 changed lines took 385–555 s each at `xhigh`; a light pass over 1,858
-changed lines, unchunked, ran about 40 minutes). A
+one use a 30-minute review budget per chunk and provider helper timeouts
+within it, passed as `--timeout`, since a helper's own default is the whole
+30 minutes (observed: chunks of 180–750 changed lines took 385–555 s at
+`xhigh`; a light pass over 1,858 lines, unchunked, about 40 minutes). A
 budget limits orchestration work, not arbitrary unrelated machine processes.
 
 State progression is explicit:

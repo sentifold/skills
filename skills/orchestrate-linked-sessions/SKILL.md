@@ -320,13 +320,10 @@ proposing new ones, consider a simpler alternative, and justify the choice
 from the code. Then **validate the design before writing any
 code** with the cross-provider counterpart in read-only mode: the driver uses
 the **`codex` skill**. Hand it the approach and the files to read, and ask it to flag wrong owners, missed contracts,
-simpler alternatives, and risks. A second provider of an existing kind
-takes the first one's laws as binding: its design names each departure and
-who decided it, and compares what each provider's calls leave standing, not
-only the calls (observed: a law the driver drew from a second provider's SDK
-was withdrawn by the person after five lanes had built on it, and a seam
-shaped by the first provider's standing activity hid a button for good after
-one press, where the second's invitation is a moment).
+simpler alternatives, and risks. A second integration of an existing kind
+keeps the first one's laws: the design names each departure and who decided
+it (observed: a law the driver drew from the second service's SDK was
+withdrawn by the person after five lanes had built on it).
 
 Design gate validations are read-only and independent of each other, so **launch them as
 one batch** — one backgrounded cross-provider run per sub-task, each with its
@@ -422,12 +419,9 @@ branch; the driver asks for it by message and waits for the new head. A lane
 stacked on another does not follow its predecessor commit by commit: it
 restacks at `go`, onto the predecessor's implementation head; when the
 predecessor's per-lane gates close, onto that head; and after that only when
-a Final Review fix or a merge below moves its base. The driver calls a
-lane's base final only once no open question can still move a head below it
-(observed: two lanes were told their stack was settled while the person's
-answer to such a question was pending, and one floor ran for nothing). A
-restack rewrites the reviewed head: the lane records which new commit it
-became, and the fix-delta range starts there.
+a Final Review fix or a merge below moves its base. A restack rewrites the
+reviewed head: the lane records which new commit it became, and the fix-delta
+range starts there.
 
 **One session, one worktree.** The driver never writes into a lane's worktree
 and never runs git there; a lane never writes into another lane's or the
@@ -436,10 +430,9 @@ different worktree"). A fix another lane needs, a restack, a revert, a re-run:
 all travel as a message to the session that owns the worktree, which does it
 and reports the new head. A change goes to one lane, once, as final (observed:
 a one-word fix moved to another lane's PR by a second message crossed the
-first lane's push: a revert, an extra push and gate). A lane in a turn reads
-its messages only when the turn ends, so the driver sends it one and waits for
-the answer before the next (observed: five crossed in twenty minutes, and the
-person was given three lists of presses for one sitting).
+first lane's push: a revert, an extra push and gate). A lane in a turn gets
+one message at a time, the next after its answer, since messages wait for the
+turn's end (observed: five crossed in twenty minutes).
 
 **Check work in flight on the same surface before the Design gate.** Another session may already own
 part of the scope (observed: a sibling PR adding the same asset surfaced only in a live-test
@@ -485,10 +478,8 @@ maps and docs with behavior changes in the same lane.
 
 A first-order review on every sub-task, before it can advance. Review an
 immutable snapshot: give every leg the same exact base/head (the shared
-[scope helper](../review-agent/scripts/resolve_scope.py) can record it), never
-named by a ref another session can move, and do not edit the tree while a leg
-reads it (observed: a range handed to a lane's readers as `origin/<branch>...HEAD`
-moved under them when another session fetched). Run all three
+[scope helper](../review-agent/scripts/resolve_scope.py) can record it) and do
+not edit the tree while a leg reads it. Run all three
 legs — the third folds into the first in light and may in heavy:
 
 1. A native correctness review, by [weight](#weight), run by the lane.
@@ -587,11 +578,10 @@ calling the gate.
 
 **Proceed only when the native and cross-provider reviews agree the solution is
 sound.** Reconcile every finding with concrete code evidence; fix actionable
-in-scope defects, then repeat only the affected checks. A claim about what a
-provider or other outside system does or refuses stays PLAUSIBLE until a probe
-or its documentation shows it (observed: a reader's claim that a DNS service
-refuses an alias was recorded as confirmed, the driver declined a change of
-the deploy order on it, and the Final Review found it false). In light that is one
+in-scope defects, then repeat only the affected checks. A claim about what an
+outside service does or refuses stays PLAUSIBLE until probed or cited
+(observed: one recorded as confirmed carried a decision of the driver's until
+the Final Review found it false). In light that is one
 fix-delta check once the fixes change behavior: commit the fixes, then a fresh
 reviewer subagent, scoped and budgeted as above, over
 `<reviewed-head>..HEAD` and the enclosing functions, given the verified list
@@ -633,11 +623,10 @@ performance; one does not prove the others.
 
 A smoke that surfaces anything doubtful escalates to the full exercise — never
 to a shrug. Do not stretch a low tier over a risky change to save time; the
-tier claim is part of the gate evidence. A stand-in for a third-party SDK (a
-module mock, a story, a routed fake) proves nothing about how its real module
-loads: exercise the real module behind a fake of the host bridge it calls
-(observed: an SDK whose default export is a proxy answering `then` never let
-a dynamic import chained on it settle, and every stand-in hid it).
+tier claim is part of the gate evidence. A stand-in for a third-party SDK
+proves nothing about how its real module loads: run the real module against a
+fake of its host (observed: every stand-in hid a default export on which a
+dynamic import never settled).
 
 **Pick the live-test executor by product surface** from the project profile's
 "Verification by changed surface" table (learned the hard way: an executor
@@ -655,18 +644,13 @@ board's whole exercise in the person's Chrome, where a hidden tab loads
 nothing, and the person was asked to keep the window in front, which blocked
 their work).
 
-**A sitting at the person's machine is planned for their hands.** A stored
-credential is first proven the cheapest way that needs no sitting, on the
-person's word since it touches a secret. A sitting starts on a message
-saying they are there, never on a general `go`; before it, the lane looks at
-what will open its links (the default browser, stray browser processes) and
-at how the person will tell apart what to press, and the plan counts the
-presses that are theirs, every one in a tab another program opened among
-them, since the lane's browser tools cannot act there (observed: a lane began
-on a `go` sent before the person was there; a sitting promised as two actions
-took five; a production check ran in circles for half an hour while another
-session's headless browser took the links and two apps looked alike, until
-two requests to the provider's token endpoint settled it).
+**A sitting at the person's machine comes last.** First the cheapest proof
+that needs no person, offered to them when it touches a secret; then a
+sitting that starts on a message that they are there, never on a general
+`go`, its plan naming every press that will be theirs (observed: a lane began
+in the person's client before they were there, two promised presses became
+five in tabs the lane could not reach, and a check that two requests to the
+service then settled ran in circles for half an hour).
 
 The lane delegates the live run to the chosen executor, **reproducing a
 clean-state scenario** so stale data cannot mask or fake a pass:
@@ -690,22 +674,6 @@ clean-state scenario** so stale data cannot mask or fake a pass:
   untouched and leaves new behavior (e.g. a rollback / transactional path)
   unproven. Treat any affected surface you did not exercise as a coverage gap to
   close, or to call out explicitly in the Live Test record rather than imply it passed.
-- **A page that describes a product surface** (help, a listing, onboarding)
-  is read claim by claim against what that surface draws (observed: help-page
-  lines promising cards a panel never draws stayed in on the driver's word
-  after the lane had found it draws none, until the Final Review found them
-  false).
-- **A check can change or inherit what it reads.** Look up a name about to be
-  created only at its authoritative server, since any other resolver
-  remembers the miss for the zone's negative TTL; read a provider's form
-  without reloading it, since a reload drops what is unsaved; and run a
-  first-time path with the remembered one out of the way, the plan naming
-  what tells the two apart. A reading that contradicts what the person says
-  they did is first a question about the reading (observed: a lookup made
-  minutes before a cutover left the new host unresolvable behind the person's
-  resolver after it; a lane's reloads cleared a tick the person had set, and
-  they were asked four times to set it again; a browser that remembered a
-  first-time prompt launched the app before the fresh profile under test did).
 
 Run live tests for different lanes **in parallel by default** — lanes in separate
 worktrees are isolated by design when the project's managed launch gives each
@@ -960,10 +928,9 @@ nothing it has not read there.
 auto-merge**: readying PRs is the orchestrator's job, merging is the user's.
 A review or implementation request alone never implies merge, deployment,
 external report publication, or messages to teammates, and a general word to
-land is not the word for a production deploy: that is asked as its own
-question before the step is announced (observed: the driver told the person
-a production deploy was under way on a general word to land; the lane
-refused, and the sentence was taken back).
+land is not the word for a production deploy: the driver asks for that as its
+own question before announcing the step (observed: the driver announced a
+production deploy on a general word to land, and the lane refused it).
 Report the ready PRs and merge only on explicit instruction, then follow the
 chain mechanics below. Confirm the body still reflects the whole branch, in the
 `github-create-pr` body shape, with `## Testing` naming the actual clean-state
@@ -1022,10 +989,9 @@ slot, a new head or a finished lane must not wait for the others; a turn that
 changed none of that sends none, the app's note is enough, and every message
 starts a turn of the driver's — and the driver answers by the lane's session
 id. Anything in a lane's worktree — a restack, a revert, a re-run — the
-driver asks of the lane by message and never does there. Every stamp a
-record carries comes from `date -u` in the command that writes it, never from
-an estimate (observed: local times labelled UTC for half a run, then two
-entries stamped from estimate fifteen minutes ahead).
+driver asks of the lane by message and never does there. Every stamp in a
+record comes from `date -u` in the command that writes it (observed: local
+times labelled UTC, then stamps written from estimate, fifteen minutes ahead).
 
 **Evidence outlives the worktree.** The app hands an archived session's
 worktree folder to a new session, so `.local/` is scratch and a path into it
@@ -1165,7 +1131,10 @@ lanes whose work in flight the answer could invalidate (`stop_session`; a
 message reaches a busy lane only when its turn ends), sends `pause` to the
 rest and waits for their `paused` state lines, then asks. Batch every
 decision pending at the driver into that one checkpoint — one round-trip, not
-one ask per lane.
+one ask per lane. A reading that contradicts what the person says they did is
+first a question about the reading (observed: a lane's reloads of a form
+cleared the tick the person had set, and the driver asked them four times to
+set it).
 
 Checkpoint shape:
 
@@ -1336,11 +1305,7 @@ it started will continue it on finishing: a background task
 detached otherwise, does not, so it first gets a background wait — the
 `codex` skill's [runtime notes](../codex/references/runtime-findings.md)
 give one (observed: a lane started a Codex write run with `&`, which no
-notification follows, and found out only when nudged). A command that asks
-for a confirmation gets it as its own flag once its diff has been read, never
-from `yes` through a pseudo-terminal (observed: a stack deploy run that way
-died with exit 137 half-way through its stacks; run again without one, it
-finished).
+notification follows, and found out only when nudged).
 
 A lane never edits outside its worktree; never changes its slice — a scope
 question goes to the driver by message, and the lane parks; never merges,
@@ -1352,12 +1317,9 @@ Messages it answers: `go` (start the warm build, then the code, or after a
 `pause` carry on from where it stopped; when it
 names a head, restack onto it first); `pause` (finish the step in flight,
 commit nothing new, report the state line `paused`, wait for `go`);
-`restack onto <ref>` (read the branch's remote head with `git ls-remote`,
-rebase `--onto`, re-record the base, re-run the floor, force-push with a lease
-on the head read first, never on a SHA typed by hand (observed: a typed lease
-was refused as stale), and report the new head, or the refusal without
-retrying it); `revert <path>` (to the base, per
-phase 3); `re-run <check>`; `stop`
+`restack onto <ref>` (rebase `--onto`,
+re-record the base, re-run the floor, force-push with lease, report the new
+head); `revert <path>` (to the base, per phase 3); `re-run <check>`; `stop`
 (end the turn where the tree stands, and say where that is). Marking the PR
 ready is the driver's, never the lane's.
 

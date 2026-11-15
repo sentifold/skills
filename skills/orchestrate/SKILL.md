@@ -443,10 +443,8 @@ maps and docs with behavior changes in the same lane.
 
 A first-order review on every sub-task, before it can advance. Review an
 immutable snapshot: give every leg the same exact base/head (the shared
-[scope helper](../review-agent/scripts/resolve_scope.py) can record it), never
-named by a ref another session can move, and do not edit the tree while a leg
-reads it (observed: a range handed to a lane's readers as `origin/<branch>...HEAD`
-moved under them when another session fetched). Run all three
+[scope helper](../review-agent/scripts/resolve_scope.py) can record it) and do
+not edit the tree while a leg reads it. Run all three
 legs — the third folds into the first in light and may in heavy:
 
 1. A native correctness review, by [weight](#weight). The Codex driver
@@ -590,11 +588,10 @@ performance; one does not prove the others.
 
 A smoke that surfaces anything doubtful escalates to the full exercise — never
 to a shrug. Do not stretch a low tier over a risky change to save time; the
-tier claim is part of the gate evidence. A stand-in for a third-party SDK (a
-module mock, a story, a routed fake) proves nothing about how its real module
-loads: exercise the real module behind a fake of the host bridge it calls
-(observed: an SDK whose default export is a proxy answering `then` never let
-a dynamic import chained on it settle, and every stand-in hid it).
+tier claim is part of the gate evidence. A stand-in for a third-party SDK
+proves nothing about how its real module loads: run the real module against a
+fake of its host (observed: every stand-in hid a default export on which a
+dynamic import never settled).
 
 **Pick the live-test executor by product surface** from the project profile's
 "Verification by changed surface" table (learned the hard way: an executor
@@ -625,22 +622,6 @@ scenario** so stale data cannot mask or fake a pass:
   untouched and leaves new behavior (e.g. a rollback / transactional path)
   unproven. Treat any affected surface you did not exercise as a coverage gap to
   close, or to call out explicitly in the Live Test record rather than imply it passed.
-- **A page that describes a product surface** (help, a listing, onboarding)
-  is read claim by claim against what that surface draws (observed: help-page
-  lines promising cards a panel never draws stayed in on the driver's word
-  after the lane had found it draws none, until the Final Review found them
-  false).
-- **A check can change or inherit what it reads.** Look up a name about to be
-  created only at its authoritative server, since any other resolver
-  remembers the miss for the zone's negative TTL; read a provider's form
-  without reloading it, since a reload drops what is unsaved; and run a
-  first-time path with the remembered one out of the way, the plan naming
-  what tells the two apart. A reading that contradicts what the person says
-  they did is first a question about the reading (observed: a lookup made
-  minutes before a cutover left the new host unresolvable behind the person's
-  resolver after it; a lane's reloads cleared a tick the person had set, and
-  they were asked four times to set it again; a browser that remembered a
-  first-time prompt launched the app before the fresh profile under test did).
 
 Run live tests for different lanes **in parallel by default** — lanes in separate
 worktrees are isolated by design when the project's managed launch gives each
