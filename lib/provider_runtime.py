@@ -729,7 +729,7 @@ class Run:
 
     def record_settings(self):
         # codex exec prints the settings it runs with between two "--------" lines
-        # at the top of stderr; a provider policy is checked against these two.
+        # at the top of stderr; a provider policy is checked against these four.
         if self.provider != "codex" or self.data.get("phase") != "provider":
             return
         try:
@@ -739,7 +739,7 @@ class Run:
             return
         for line in blocks[1].splitlines() if len(blocks) > 2 else ():
             key, _, value = line.partition(": ")
-            if key in ("model", "reasoning effort"):
+            if key in ("model", "reasoning effort", "sandbox", "approval"):
                 self.data[key.replace(" ", "_")] = value.strip()
 
     def prepare(self):
