@@ -656,8 +656,8 @@ nothing, and the person was asked to keep the window in front, which blocked
 their work).
 
 **A sitting at the person's machine is planned for their hands.** A stored
-credential is first proven the cheapest way that needs no sitting, offered to
-the person first since it touches a secret. A sitting starts on a message
+credential is first proven the cheapest way that needs no sitting, on the
+person's word since it touches a secret. A sitting starts on a message
 saying they are there, never on a general `go`; before it, the lane looks at
 what will open its links (the default browser, stray browser processes) and
 at how the person will tell apart what to press, and the plan counts the
@@ -1352,10 +1352,11 @@ Messages it answers: `go` (start the warm build, then the code, or after a
 `pause` carry on from where it stopped; when it
 names a head, restack onto it first); `pause` (finish the step in flight,
 commit nothing new, report the state line `paused`, wait for `go`);
-`restack onto <ref>` (rebase `--onto`,
-re-record the base, re-run the floor, force-push with a lease on the head
-`git ls-remote` prints, never a SHA typed by hand (observed: a typed lease was
-refused as stale), report the new head); `revert <path>` (to the base, per
+`restack onto <ref>` (read the branch's remote head with `git ls-remote`,
+rebase `--onto`, re-record the base, re-run the floor, force-push with a lease
+on the head read first, never on a SHA typed by hand (observed: a typed lease
+was refused as stale), and report the new head, or the refusal without
+retrying it); `revert <path>` (to the base, per
 phase 3); `re-run <check>`; `stop`
 (end the turn where the tree stands, and say where that is). Marking the PR
 ready is the driver's, never the lane's.

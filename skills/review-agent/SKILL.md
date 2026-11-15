@@ -274,8 +274,9 @@ such a worktree to another branch between the check and the launch, which
 cost one cancelled attempt). A plain copy of the snapshot's
 files is not such a checkout: `git` run in it reads the enclosing repository
 (observed: a Final Review handed its leg copies under the driver's worktree,
-whose HEAD was `main`). Where no worktree may be added, the leg reads the
-head's objects alone, `git show "${HEAD_SHA}:<path>"` (braced, since zsh takes
+whose HEAD was `main`). Where no worktree may be added, the leg runs in any
+checkout of the repository and reads the head's objects alone,
+`git show "${HEAD_SHA}:<path>"` (braced, since zsh takes
 `$SHA:a…` for a modifier), and its prompt says so (observed: a pass whose brief
 allowed no writes ran its leg that way to a complete result). Use an
 absolute, unused `--out`
