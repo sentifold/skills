@@ -1,6 +1,6 @@
 ---
 name: review-orchestrator
-description: "Run the review-agent orchestrator only for an explicit review-agent invocation or a named gate of an explicitly invoked workflow (orchestrate's Final Review gate); resolve the scope, run checks, select lenses, inspect them yourself (light, the default) or fan out review-lens children (heavy), run the cross-provider leg, validate findings, and return COMPLETE or INCOMPLETE with verified coverage. Never auto-delegate from ordinary review intent; first-order review requests belong to /code-review, codex review, or /simplify."
+description: "Run the review-agent orchestrator only for an explicit review-agent invocation or a named gate of an explicitly invoked workflow (the Final Review gate of orchestrate or delegate); resolve the scope, run checks, select lenses, inspect them yourself (light, the default) or fan out review-lens children (heavy), run the cross-provider leg, validate findings, and return COMPLETE or INCOMPLETE with verified coverage. Never auto-delegate from ordinary review intent; first-order review requests belong to /code-review, codex review, or /simplify."
 tools: Bash, Read, Write, Glob, Grep, ToolSearch, Agent
 ---
 

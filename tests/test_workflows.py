@@ -17,8 +17,8 @@ import install
 
 ROOT = Path(__file__).resolve().parents[1]
 SCOPE = ROOT / "skills/review-agent/scripts/resolve_scope.py"
-WORKFLOWS = ("orchestrate", "orchestrate-linked-sessions", "review-agent", "github-create-pr",
-             "claude-stock-code-review")
+WORKFLOWS = ("orchestrate", "orchestrate-linked-sessions", "delegate", "review-agent",
+             "github-create-pr", "claude-stock-code-review")
 PROFILE_TEMPLATE = ROOT / "templates/project-workflow.md"
 PROFILE_SECTIONS = (
     "Scope, branches and PRs",
@@ -307,7 +307,7 @@ class WorkflowPackageTests(unittest.TestCase):
             ui = ui_path.read_text() if ui_path.is_file() else ""
             if ui:
                 self.assertIn("$" + name, ui)
-            if name in ("orchestrate", "orchestrate-linked-sessions", "review-agent"):
+            if name in ("orchestrate", "orchestrate-linked-sessions", "delegate", "review-agent"):
                 self.assertIn("disable-model-invocation: true", frontmatter)
                 if ui:
                     self.assertIn("allow_implicit_invocation: false", ui)

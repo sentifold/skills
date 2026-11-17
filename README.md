@@ -9,7 +9,8 @@ policy stay in each consuming repo's `AGENTS.md` and optional
 | --- | --- | --- |
 | `orchestrate` | Claude Code, Codex | Explicit workflow invocation |
 | `orchestrate-linked-sessions` | Claude Code (desktop app) | Explicit workflow invocation; `orchestrate` with every lane as a linked session |
-| `review-agent` | Claude Code, Codex | Explicit layered review, or orchestrate's named final gate |
+| `delegate` | Claude Code | Explicit workflow invocation; one medium task as one PR, in two layers: the session specs and reviews, Codex writes |
+| `review-agent` | Claude Code, Codex | Explicit layered review, or the named final gate of `orchestrate` or `delegate` |
 | `github-create-pr` | Claude Code, Codex | Create/update a PR when requested |
 | `codex` | Claude Code | Explicit second-provider task or authorized workflow leg |
 | `claude` | Codex | Explicit second-provider task or authorized workflow leg |
@@ -113,7 +114,9 @@ and CI instructions first. Invoke `/orchestrate` in Claude Code or `$orchestrate
 in Codex with a concrete task; its reviews run light unless you name `heavy`
 (`/orchestrate heavy <task>`). In the Claude desktop app,
 `/orchestrate-linked-sessions` runs the same loop with every lane as a linked
-session of its own. The shared workflow discovers the project's base,
+session of its own. For one medium task that is one PR, `/delegate <task>` in
+Claude Code runs a single lane in two layers: the session writes the spec and
+reviews, Codex writes the code. The shared workflow discovers the project's base,
 checks and optional `.agents/project-workflow.md`; it never assumes `develop`,
 a native game runtime, or permission to merge/deploy.
 
