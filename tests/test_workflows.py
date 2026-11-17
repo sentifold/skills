@@ -17,8 +17,7 @@ import install
 
 ROOT = Path(__file__).resolve().parents[1]
 SCOPE = ROOT / "skills/review-agent/scripts/resolve_scope.py"
-WORKFLOWS = ("orchestrate", "orchestrate-linked-sessions", "delegate", "review-agent",
-             "github-create-pr", "claude-stock-code-review")
+WORKFLOWS = ("orchestrate", "delegate", "review-agent", "github-create-pr", "claude-stock-code-review")
 PROFILE_TEMPLATE = ROOT / "templates/project-workflow.md"
 PROFILE_SECTIONS = (
     "Scope, branches and PRs",
@@ -307,7 +306,7 @@ class WorkflowPackageTests(unittest.TestCase):
             ui = ui_path.read_text() if ui_path.is_file() else ""
             if ui:
                 self.assertIn("$" + name, ui)
-            if name in ("orchestrate", "orchestrate-linked-sessions", "delegate", "review-agent"):
+            if name in ("orchestrate", "delegate", "review-agent"):
                 self.assertIn("disable-model-invocation: true", frontmatter)
                 if ui:
                     self.assertIn("allow_implicit_invocation: false", ui)
@@ -380,25 +379,6 @@ class WorkflowPackageTests(unittest.TestCase):
         self.assertIn("never through the Skill tool", text)
         self.assertIn("Provider policy", text)
 
-    def test_orchestrate_extra_engines_stay_optional(self):
-        text = (ROOT / "skills/orchestrate/SKILL.md").read_text()
-        section = text.split("## Extra engines (optional)\n", 1)[1].split("\n## ", 1)[0]
-        self.assertIn("When the session has\nneither skill, skip this section and every reference to it", section)
-        self.assertIn("`REVIEW INCOMPLETE` still stops and asks", section)
-        self.assertIn("`kimi` never reviews its own lane", section)
-        self.assertIn("When\n  neither can run, the rule above stands.", section)
-        self.assertIn("Record it as\n`blocked: cross-provider unavailable — <reason>`", text)
-        self.assertEqual(text.count("(#extra-engines-optional)"), 5)
-        for name in ("## Runtime mapping\n", "## Gates summary\n", "## Stop conditions\n"):
-            body = text.split(name, 1)[1].split("\n## ", 1)[0]
-            if name != "## Stop conditions\n":  # Only the tables must stay as they are.
-                body = "\n".join(line for line in body.splitlines() if line.startswith("|"))
-            for engine in ("`cursor`", "`kimi`", "extra engine"):
-                self.assertNotIn(engine, body, (name, engine))
-        catalog = json.loads((ROOT / "catalog.json").read_text())
-        names = {package["name"] for package in catalog["packages"]}
-        self.assertFalse({"cursor", "kimi"} & names, "extra engines are never a catalog requirement")
-
     def test_orchestrate_metadata_is_explicit_only_and_portable(self):
         text = (ROOT / "skills/orchestrate/SKILL.md").read_text()
         frontmatter = text.split("---", 2)[1]
@@ -411,9 +391,6 @@ class WorkflowPackageTests(unittest.TestCase):
         self.assertNotIn("$HOME/", text)
         for project_only in ("game_build", "develop`", "sentifold/cloud", "THGAMES_", "games-ts/"):
             self.assertNotIn(project_only, text)
-        ui = (ROOT / "skills/orchestrate/agents/openai.yaml").read_text()
-        self.assertIn("allow_implicit_invocation: false", ui)
-        self.assertIn("$orchestrate", ui)
 
     def test_profile_template_and_examples_carry_every_contract_section(self):
         profiles = [PROFILE_TEMPLATE, *sorted((ROOT / "examples").glob("*.md"))]

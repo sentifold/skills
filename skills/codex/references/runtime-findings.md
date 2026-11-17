@@ -255,7 +255,7 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   writes `TIMEOUT`, so a stuck supervisor would hold an uncapped wait forever. A last line
   of `RUNNING` or `QUIET` means the wait hit its own deadline: the run is not done, so
   check its progress as below, cancel it or report it. Observed in an
-  orchestrate-linked-sessions lane, which had started a write run with `&`: the watcher it
+  orchestrate lane, which had started a write run with `&`: the watcher it
   backgrounded returned at once, and it wrote a capped wait of its own.
 - **`Reading additional input from stdin...` in the provider output is harmless.** The
   helper closes stdin for argument prompts, so the run proceeds.

@@ -1,8 +1,8 @@
 # Sentifold skills onboarding
 
-Goal: `/orchestrate` in Claude Code and `$orchestrate` in Codex work in a
-participant's own project, including its checks and an independent review,
-without a gamejam checkout.
+Goal: `/orchestrate` in the Claude desktop app works in a participant's own
+project, including its checks and an independent review, without a gamejam
+checkout.
 
 1. **Access and version.** The participant checks access to the private
    `sentifold/skills`, Python 3.11+, Bash and the CLI of each runtime they use.
@@ -72,8 +72,8 @@ inside the project checkout.
    `config.toml`: the user-level `~/.codex/config.toml` (checked by `doctor`) or
    the project's `.codex/config.toml` (not read by `doctor`). Claude Code needs
    no configuration.
-4. **Smoke.** Open a new session in the project and run `/orchestrate`
-   (Claude Code) or `$orchestrate` (Codex) on a tiny documentation change.
+4. **Smoke.** Open a new session in the project in the Claude desktop app and
+   run `/orchestrate` on a tiny documentation change.
    Expected: the agent reads the profile and names the project's base and
    checks; it records `not-applicable:` with a reason for the runtime smoke;
    Final Review runs both provider legs or ends honestly with

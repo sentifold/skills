@@ -60,7 +60,7 @@ class InstallerTests(unittest.TestCase):
 
     def assert_no_install(self):
         self.assertFalse(self.locations.receipt.exists())
-        self.assertFalse((self.home / ".agents/skills/orchestrate").exists())
+        self.assertFalse((self.home / ".agents/skills/github-create-pr").exists())
         self.assertFalse((self.home / ".claude/agents/review-orchestrator.md").exists())
 
     def test_plan_is_read_only_then_clean_apply_is_complete_and_idempotent(self):
@@ -119,12 +119,12 @@ class InstallerTests(unittest.TestCase):
             self.assertFalse((Path(environment["CODEX_HOME"]) / "agents/review-lens.toml").exists())
 
     def test_unowned_directory_is_never_adopted(self):
-        directory = self.home / ".agents/skills/orchestrate"
+        directory = self.home / ".agents/skills/github-create-pr"
         directory.mkdir(parents=True)
         file = directory / "personal.txt"
         file.write_text("keep me")
         with self.assertRaisesRegex(install.InstallError, "ordinary files/directories cannot be adopted"):
-            self.plan(adopt={"orchestrate"})
+            self.plan(adopt={"github-create-pr"})
         self.assertEqual(file.read_text(), "keep me")
         self.assertFalse(self.locations.receipt.exists())
 
@@ -138,11 +138,11 @@ class InstallerTests(unittest.TestCase):
         self.assert_no_install()
 
     def test_symlink_requires_named_adoption_and_uninstall_restores_it(self):
-        link = self.fixture_link(".agents/skills/orchestrate")
-        with self.assertRaisesRegex(install.InstallError, "--adopt orchestrate"):
+        link = self.fixture_link(".agents/skills/github-create-pr")
+        with self.assertRaisesRegex(install.InstallError, "--adopt github-create-pr"):
             self.plan()
-        self.perform(adopt={"orchestrate"})
-        self.assertEqual(link.resolve(), self.root / "skills/orchestrate")
+        self.perform(adopt={"github-create-pr"})
+        self.assertEqual(link.resolve(), self.root / "skills/github-create-pr")
         self.perform(uninstall=True)
         self.assertTrue(link.is_symlink())
         self.assertEqual(os.readlink(link), "old relative target")
@@ -155,18 +155,18 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(self.home.exists())
 
     def test_legacy_duplicate_is_reported_and_named_adoption_restores_on_uninstall(self):
-        legacy = self.fixture_link(".codex/skills/orchestrate", "/old/shared/orchestrate")
+        legacy = self.fixture_link(".codex/skills/github-create-pr", "/old/shared/github-create-pr")
         with self.assertRaisesRegex(install.InstallError, "Unowned destination conflict"):
             self.plan()
-        self.perform(adopt={"orchestrate"})
+        self.perform(adopt={"github-create-pr"})
         self.assertFalse(legacy.is_symlink())
         self.assertEqual(self.plan().changes, [])
         self.perform(uninstall=True)
-        self.assertEqual(os.readlink(legacy), "/old/shared/orchestrate")
+        self.assertEqual(os.readlink(legacy), "/old/shared/github-create-pr")
 
     def test_custom_codex_root_checks_both_legacy_locations(self):
         locations = install.Locations(self.home, self.base / "custom codex", self.locations.claude)
-        conventional = self.fixture_link(".codex/skills/orchestrate")
+        conventional = self.fixture_link(".codex/skills/github-create-pr")
         custom = locations.codex / "skills/review-agent"
         custom.parent.mkdir(parents=True)
         custom.symlink_to("old review")
@@ -174,12 +174,12 @@ class InstallerTests(unittest.TestCase):
             self.plan(locations=locations)
         self.assertIn(str(conventional), str(error.exception))
         self.assertIn(str(custom), str(error.exception))
-        self.perform(locations=locations, adopt={"orchestrate", "review-agent"})
+        self.perform(locations=locations, adopt={"github-create-pr", "review-agent"})
         self.assertFalse(conventional.is_symlink())
         self.assertFalse(custom.is_symlink())
 
     def test_other_runtime_legacy_directory_does_not_block_claude_only(self):
-        legacy = self.fixture_link(".codex/skills/orchestrate")
+        legacy = self.fixture_link(".codex/skills/github-create-pr")
         self.perform(selected={"claude"})
         self.assertTrue(legacy.is_symlink())
 
@@ -196,51 +196,51 @@ class InstallerTests(unittest.TestCase):
 
     def test_retargeted_owned_symlink_needs_adoption_again(self):
         self.perform()
-        link = self.home / ".agents/skills/orchestrate"
+        link = self.home / ".agents/skills/github-create-pr"
         link.unlink()
         link.symlink_to("personal replacement")
-        with self.assertRaisesRegex(install.InstallError, "Owned symlink was retargeted; restore it or pass --adopt orchestrate to take it over again"):
+        with self.assertRaisesRegex(install.InstallError, "Owned symlink was retargeted; restore it or pass --adopt github-create-pr to take it over again"):
             self.plan()
         with self.assertRaisesRegex(install.InstallError, "Owned symlink was retargeted; restore it before proceeding"):
             self.plan(uninstall=True)
         self.assertEqual(os.readlink(link), "personal replacement")
-        plan = self.perform(adopt={"orchestrate"})
+        plan = self.perform(adopt={"github-create-pr"})
         self.assertEqual([change.label for change in plan.changes], ["adopt symlink", "write ownership receipt"])
-        self.assertEqual(link.resolve(), self.root / "skills/orchestrate")
+        self.assertEqual(link.resolve(), self.root / "skills/github-create-pr")
         self.perform(uninstall=True)
         self.assertEqual(os.readlink(link), "personal replacement")
 
     def test_dotfiles_recreated_links_block_apply_until_adopted_and_never_block_uninstall(self):
-        adopted = self.fixture_link(".agents/skills/orchestrate", "dotfiles/orchestrate")
-        legacy = self.fixture_link(".codex/skills/orchestrate", "dotfiles/legacy orchestrate")
-        self.perform(adopt={"orchestrate"})
+        adopted = self.fixture_link(".agents/skills/github-create-pr", "dotfiles/github-create-pr")
+        legacy = self.fixture_link(".codex/skills/github-create-pr", "dotfiles/legacy github-create-pr")
+        self.perform(adopt={"github-create-pr"})
         for round in range(2):
             adopted.unlink()
-            adopted.symlink_to("dotfiles/orchestrate")
-            legacy.symlink_to("dotfiles/legacy orchestrate")
+            adopted.symlink_to("dotfiles/github-create-pr")
+            legacy.symlink_to("dotfiles/legacy github-create-pr")
             with self.assertRaises(install.InstallError) as error:
                 self.plan()
-            self.assertIn(f"Owned symlink was retargeted; restore it or pass --adopt orchestrate to take it over again before proceeding: {adopted}", str(error.exception))
-            self.assertIn(f"Owned legacy duplicate was recreated; delete it or restore its recorded target or pass --adopt orchestrate to remove it again before proceeding: {legacy}", str(error.exception))
+            self.assertIn(f"Owned symlink was retargeted; restore it or pass --adopt github-create-pr to take it over again before proceeding: {adopted}", str(error.exception))
+            self.assertIn(f"Owned legacy duplicate was recreated; delete it or restore its recorded target or pass --adopt github-create-pr to remove it again before proceeding: {legacy}", str(error.exception))
             if round == 0:
-                plan = self.perform(adopt={"orchestrate"})
+                plan = self.perform(adopt={"github-create-pr"})
                 self.assertEqual({change.label for change in plan.changes}, {"adopt symlink", "remove legacy duplicate"})
-                self.assertEqual(adopted.resolve(), self.root / "skills/orchestrate")
+                self.assertEqual(adopted.resolve(), self.root / "skills/github-create-pr")
                 self.assertFalse(legacy.is_symlink())
         plan = self.perform(uninstall=True)
         self.assertNotIn(adopted, {change.path for change in plan.changes})
-        self.assertEqual(os.readlink(adopted), "dotfiles/orchestrate")
-        self.assertEqual(os.readlink(legacy), "dotfiles/legacy orchestrate")
+        self.assertEqual(os.readlink(adopted), "dotfiles/github-create-pr")
+        self.assertEqual(os.readlink(legacy), "dotfiles/legacy github-create-pr")
         self.assertFalse(self.locations.receipt.exists())
 
     def test_deleted_owned_link_does_not_block_uninstall(self):
         self.perform()
-        (self.home / ".agents/skills/orchestrate").unlink()
+        (self.home / ".agents/skills/github-create-pr").unlink()
         self.perform(uninstall=True)
         self.assertFalse(self.locations.receipt.exists())
 
     def test_legacy_directory_is_named_as_duplicate_to_move_aside(self):
-        directory = self.home / ".codex/skills/orchestrate"
+        directory = self.home / ".codex/skills/github-create-pr"
         directory.mkdir(parents=True)
         (directory / "SKILL.md").write_text("old copy")
         with self.assertRaisesRegex(install.InstallError, f"Legacy Codex skill duplicates the shared package; move it aside, ordinary files/directories are never removed: {re.escape(str(directory))}"):
@@ -249,13 +249,13 @@ class InstallerTests(unittest.TestCase):
         self.assert_no_install()
 
     def test_update_then_apply_old_checkout_rolls_back_and_keeps_adoption(self):
-        adopted = self.fixture_link(".agents/skills/orchestrate", "before installation")
-        self.perform(adopt={"orchestrate"})
+        adopted = self.fixture_link(".agents/skills/github-create-pr", "before installation")
+        self.perform(adopt={"github-create-pr"})
         original = self.locations.receipt.read_bytes()
         next_root = self.base / "second checkout"
         shutil.copytree(self.root, next_root)
         self.perform(root=next_root)
-        self.assertEqual(adopted.resolve(), next_root / "skills/orchestrate")
+        self.assertEqual(adopted.resolve(), next_root / "skills/github-create-pr")
         self.assertIn(str(next_root / "skills"), (self.locations.codex / "agents/review-lens.toml").read_text())
         self.perform(root=self.root)
         self.assertEqual(self.locations.receipt.read_bytes(), original)
@@ -263,8 +263,8 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(os.readlink(adopted), "before installation")
 
     def test_partial_failure_restores_adopted_links_and_new_files(self):
-        adopted = self.fixture_link(".agents/skills/orchestrate", "before installation")
-        plan = self.plan(adopt={"orchestrate"})
+        adopted = self.fixture_link(".agents/skills/github-create-pr", "before installation")
+        plan = self.plan(adopt={"github-create-pr"})
         real_write = install.write_state
         calls = 0
 
@@ -302,13 +302,13 @@ class InstallerTests(unittest.TestCase):
                 install.apply(self.plan(root=next_root))
         self.assertEqual(self.locations.receipt.read_bytes(), receipt)
         self.assertEqual((self.locations.codex / "agents/review-lens.toml").read_bytes(), original_agent)
-        self.assertEqual((self.home / ".agents/skills/orchestrate").resolve(), self.root / "skills/orchestrate")
+        self.assertEqual((self.home / ".agents/skills/github-create-pr").resolve(), self.root / "skills/github-create-pr")
 
     def test_interruption_after_a_write_rolls_back_and_restores_signal_handler(self):
         for error in (KeyboardInterrupt(), SystemExit(2)):
             with self.subTest(error=type(error).__name__):
-                adopted = self.fixture_link(".agents/skills/orchestrate", "before installation")
-                plan = self.plan(adopt={"orchestrate"})
+                adopted = self.fixture_link(".agents/skills/github-create-pr", "before installation")
+                plan = self.plan(adopt={"github-create-pr"})
                 real_write = install.write_state
                 handler = install.signal.getsignal(install.signal.SIGINT)
                 calls = 0
@@ -354,7 +354,7 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(self.home.exists())
 
     def test_invalid_dependency_is_rejected(self):
-        self.catalog["packages"][0]["requires"]["codex"].append("missing")
+        self.catalog["packages"][0]["requires"]["claude"].append("missing")
         (self.root / "catalog.json").write_text(json.dumps(self.catalog))
         with self.assertRaisesRegex(install.InstallError, "unavailable dependency"):
             self.plan()
@@ -382,7 +382,7 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(self.home.exists())
 
     def test_policy_metadata_and_license_are_required_resources(self):
-        for resource in ("skills/orchestrate/agents/openai.yaml", "skills/review-agent/agents/openai.yaml",
+        for resource in ("skills/review-agent/agents/openai.yaml",
                          "skills/github-create-pr/agents/openai.yaml", "skills/claude/agents/openai.yaml",
                          "skills/claude-stock-code-review/agents/openai.yaml", "skills/codex/LICENSE.txt"):
             with self.subTest(resource=resource):
@@ -401,20 +401,19 @@ class InstallerTests(unittest.TestCase):
             self.plan()
 
     def test_plan_prints_link_then_target_previous_targets_and_source_revision(self):
-        self.fixture_link(".agents/skills/orchestrate", "old orchestrate")
+        self.fixture_link(".agents/skills/github-create-pr", "old github-create-pr")
         self.fixture_link(".codex/skills/review-agent", "old legacy review")
         environment = {"CODEX_HOME": str(self.locations.codex), "CLAUDE_CONFIG_DIR": str(self.locations.claude)}
         revision = "a" * 40
         with patch.object(install, "ROOT", self.root), patch.dict(os.environ, environment), \
                 patch.object(install, "source_revision", return_value=revision), redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(install.main(["plan", "--home", str(self.home), "--adopt", "orchestrate", "--adopt", "review-agent"]), 0)
+            self.assertEqual(install.main(["plan", "--home", str(self.home), "--adopt", "github-create-pr", "--adopt", "review-agent"]), 0)
         text = output.getvalue()
         self.assertIn(f"Source: {self.root} (Git {revision})", text)
         self.assertIn("Packages: claude: claude-stock-code-review, codex, delegate, github-create-pr, orchestrate, "
-                      "orchestrate-linked-sessions, review-agent; "
-                      "codex: claude, github-create-pr, orchestrate, review-agent", text)
+                      "review-agent; codex: claude, github-create-pr, review-agent", text)
         self.assertIn(f"install/update: {self.home / '.claude/skills/orchestrate'} -> {self.root / 'skills/orchestrate'}\n", text)
-        self.assertIn(f"adopt symlink: {self.home / '.agents/skills/orchestrate'} -> {self.root / 'skills/orchestrate'} (was -> old orchestrate)\n", text)
+        self.assertIn(f"adopt symlink: {self.home / '.agents/skills/github-create-pr'} -> {self.root / 'skills/github-create-pr'} (was -> old github-create-pr)\n", text)
         self.assertIn(f"remove legacy duplicate: {self.home / '.codex/skills/review-agent'} (was -> old legacy review)\n", text)
         self.assertFalse(self.locations.receipt.exists())
 
@@ -423,7 +422,7 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(install.main(["apply", "--home", str(self.home), "--package", "github-create-pr"]), 0)
         self.assertIn("Packages: claude: github-create-pr; codex: github-create-pr", output.getvalue())
         self.assertTrue((self.home / ".agents/skills/github-create-pr").is_symlink())
-        self.assertFalse((self.home / ".agents/skills/orchestrate").exists())
+        self.assertFalse((self.home / ".agents/skills/review-agent").exists())
         self.assertFalse((self.home / ".codex/agents").exists())
         self.assertFalse((self.home / ".claude/agents").exists())
         plan = self.perform(packages={"review-agent"})
@@ -454,7 +453,7 @@ class InstallerTests(unittest.TestCase):
         receipt = json.loads(via_real.receipt.read_text())
         self.assertTrue(all(key.startswith(f"{real}/") for key in receipt["entries"]), list(receipt["entries"]))
         self.perform(locations=via_real, uninstall=True)
-        self.assertFalse((real / ".agents/skills/orchestrate").is_symlink())
+        self.assertFalse((real / ".agents/skills/github-create-pr").is_symlink())
         self.assertFalse(via_alias.receipt.exists())
 
     def test_missing_agent_reference_is_rejected(self):
@@ -484,7 +483,7 @@ class InstallerTests(unittest.TestCase):
         before = self.locations.receipt.read_bytes()
         self.locations.claude.symlink_to(self.home / ".agents", target_is_directory=True)
         with self.assertRaisesRegex(install.InstallError, "Runtime destinations overlap"):
-            self.plan(selected={"claude"}, adopt={"orchestrate", "review-agent", "github-create-pr"})
+            self.plan(selected={"claude"}, adopt={"review-agent", "github-create-pr"})
         self.assertEqual(self.locations.receipt.read_bytes(), before)
         self.assertEqual(self.plan(selected={"codex"}).changes, [])
 
@@ -508,7 +507,7 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(install.InstallError, "Runtime destinations overlap"):
             self.plan(selected={"codex"}, uninstall=True)
         self.assertEqual(self.locations.receipt.read_bytes(), before)
-        self.assertTrue((self.home / ".agents/skills/orchestrate").is_symlink())
+        self.assertTrue((self.home / ".agents/skills/github-create-pr").is_symlink())
 
     def test_legacy_directory_alias_is_not_removed_as_duplicate(self):
         for directory in (self.home / ".agents/skills", self.locations.codex):
@@ -516,10 +515,10 @@ class InstallerTests(unittest.TestCase):
         (self.locations.codex / "skills").symlink_to(self.home / ".agents/skills", target_is_directory=True)
         self.perform(selected={"codex"})
         self.assertEqual(self.plan(selected={"codex"}).changes, [])
-        link = self.home / ".agents/skills/orchestrate"
-        self.assertEqual(link.resolve(), self.root / "skills/orchestrate")
+        link = self.home / ".agents/skills/github-create-pr"
+        self.assertEqual(link.resolve(), self.root / "skills/github-create-pr")
         receipt = json.loads(self.locations.receipt.read_text())
-        self.assertNotIn(str(self.locations.codex / "skills/orchestrate"), receipt["entries"])
+        self.assertNotIn(str(self.locations.codex / "skills/github-create-pr"), receipt["entries"])
         self.perform(selected={"codex"}, uninstall=True)
         self.assertFalse(link.is_symlink())
         self.assertTrue((self.locations.codex / "skills").is_symlink())
@@ -530,7 +529,7 @@ class InstallerTests(unittest.TestCase):
         (self.locations.codex / "skills").symlink_to(self.locations.claude / "skills", target_is_directory=True)
         before = self.locations.receipt.read_bytes()
         with self.assertRaisesRegex(install.InstallError, "Runtime destinations overlap"):
-            self.plan(selected={"codex"}, adopt={"orchestrate", "review-agent", "github-create-pr"})
+            self.plan(selected={"codex"}, adopt={"review-agent", "github-create-pr"})
         self.assertEqual(self.locations.receipt.read_bytes(), before)
 
     def test_parent_alias_retargeting_after_preflight_is_rejected(self):
@@ -568,7 +567,7 @@ class InstallerTests(unittest.TestCase):
         config = self.locations.codex / "config.toml"
         config.write_text('model = "personal"\n')
         self.perform(selected={"codex"}, uninstall=True)
-        self.assertFalse((self.home / ".agents/skills/orchestrate").is_symlink())
+        self.assertFalse((self.home / ".agents/skills/github-create-pr").is_symlink())
         self.assertTrue((self.home / ".claude/skills/orchestrate").is_symlink())
         self.assertEqual(config.read_text(), 'model = "personal"\n')
         self.assertEqual(self.plan(selected={"claude"}).changes, [])
@@ -605,7 +604,7 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("CLI missing from PATH", output.getvalue())
             self.assertIn("config.toml not found", output.getvalue())
             self.assertIn("Verified: installed links and rendered agents match this checkout.", output.getvalue())
-            self.assertIn("codex: packages claude, github-create-pr, orchestrate, review-agent; agents review-lens, review-orchestrator; "
+            self.assertIn("codex: packages claude, github-create-pr, review-agent; agents review-lens, review-orchestrator; "
                           "no legacy duplicates in the old Codex skill roots", output.getvalue())
 
     def test_doctor_reads_codex_nesting_configuration(self):
@@ -632,7 +631,7 @@ class InstallerTests(unittest.TestCase):
                     self.assertIn(expected_status, output.getvalue())
         self.assertEqual(config.read_text(), cases[-1][0])
 
-    def crash_apply(self, writes_before_crash, after_last_write=False, adopt=("orchestrate",)):
+    def crash_apply(self, writes_before_crash, after_last_write=False, adopt=("github-create-pr",)):
         driver = f"""
 import os, sys
 from pathlib import Path
@@ -657,14 +656,14 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         result = subprocess.run([sys.executable, "-c", driver], capture_output=True, text=True)
         self.assertEqual(result.returncode, 137, result.stderr)
         journal = json.loads(self.locations.journal.read_text())
-        self.assertEqual(len(journal["changes"]), 15)
+        self.assertEqual(len(journal["changes"]), 13)
         self.assertNotIn(str(self.locations.receipt), {change["path"] for change in journal["changes"]})
         return journal
 
     def test_hard_crash_leaves_a_journal_and_the_next_plan_recovers_written_changes(self):
-        adopted = self.fixture_link(".agents/skills/orchestrate", "before installation")
-        journal = self.crash_apply(writes_before_crash=5)
-        self.assertEqual(adopted.resolve(), self.root / "skills/orchestrate")
+        adopted = self.fixture_link(".agents/skills/github-create-pr", "before installation")
+        journal = self.crash_apply(writes_before_crash=4)
+        self.assertEqual(adopted.resolve(), self.root / "skills/github-create-pr")
         self.assertTrue((self.locations.claude / "agents/review-lens.md").is_file())
         self.assertFalse((self.locations.claude / "agents/review-orchestrator.md").exists())
         self.assertFalse(self.locations.receipt.exists())
@@ -672,7 +671,7 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         self.assertEqual(journal["entries"][str(adopted)]["restore"], "before installation")
         plan = self.plan()
         self.assertEqual(plan.recovered_pid, journal["pid"])
-        self.assertIn("5 of 15 journaled changes had been written and are owned again", plan.notes[0])
+        self.assertIn("4 of 13 journaled changes had been written and are owned again", plan.notes[0])
         self.assertNotIn(adopted, {change.path for change in plan.changes})
         self.assertNotIn(self.locations.claude / "agents/review-lens.md", {change.path for change in plan.changes})
         self.assertIn(self.locations.claude / "agents/review-orchestrator.md", {change.path for change in plan.changes})
@@ -681,13 +680,13 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         self.assertEqual(self.plan().changes, [])
         receipt = json.loads(self.locations.receipt.read_text())
         self.assertEqual(receipt["entries"][str(adopted)]["restore"], "before installation")
-        self.assertEqual(len(receipt["entries"]), 15)
+        self.assertEqual(len(receipt["entries"]), 13)
         self.perform(uninstall=True)
         self.assertEqual(os.readlink(adopted), "before installation")
         self.assertFalse((self.locations.claude / "agents/review-lens.md").exists())
 
     def test_uninstall_after_a_hard_crash_restores_the_adopted_link_and_removes_written_files(self):
-        adopted = self.fixture_link(".agents/skills/orchestrate", "before installation")
+        adopted = self.fixture_link(".agents/skills/github-create-pr", "before installation")
         self.crash_apply(writes_before_crash=5)
         plan = self.plan(uninstall=True)
         self.assertIsNotNone(plan.recovered_pid)
@@ -700,15 +699,15 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
 
     def test_crash_before_any_write_and_after_the_receipt_both_recover_cleanly(self):
         self.crash_apply(writes_before_crash=0)
-        self.assertFalse((self.home / ".agents/skills/orchestrate").exists())
+        self.assertFalse((self.home / ".agents/skills/github-create-pr").exists())
         plan = self.plan()
-        self.assertIn("0 of 15 journaled changes", plan.notes[0])
-        self.assertEqual(len(plan.changes), 16)
+        self.assertIn("0 of 13 journaled changes", plan.notes[0])
+        self.assertEqual(len(plan.changes), 14)
         install.apply(plan)
         self.assertFalse(self.locations.lock.exists())
         self.assertEqual(self.plan().changes, [])
         shutil.rmtree(self.home)
-        self.crash_apply(writes_before_crash=16, after_last_write=True)
+        self.crash_apply(writes_before_crash=14, after_last_write=True)
         self.assertTrue(self.locations.receipt.exists())
         plan = self.plan()
         self.assertEqual(plan.changes, [])
