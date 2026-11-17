@@ -39,6 +39,19 @@
       }
     },
     {
+      "name": "delegate",
+      "runtimes": [
+        "claude"
+      ],
+      "requires": {
+        "claude": [
+          "review-agent",
+          "github-create-pr",
+          "codex"
+        ]
+      }
+    },
+    {
       "name": "review-agent",
       "runtimes": [
         "codex",

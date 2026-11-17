@@ -22,8 +22,8 @@ Review source without editing it.
 The person invokes it explicitly (`/review-agent` in Claude Code,
 `$review-agent` in Codex). The model must not launch it from ambient review
 intent. One chained entry is sanctioned: an explicitly user-invoked workflow
-whose contract names this pass (orchestrate's Final Review gate) carries the
-user's consent, and its driver runs the pass by spawning the
+whose contract names this pass (the Final Review gate of `orchestrate` or
+`delegate`) carries the user's consent, and its driver runs it by spawning the
 `review-orchestrator` subagent directly — never through the Skill tool, which
 refuses `disable-model-invocation` skills by design. That refusal is expected,
 not a consent failure and not a reason to stop. Where nested spawn is
