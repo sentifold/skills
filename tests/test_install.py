@@ -41,6 +41,12 @@ class InstallerTests(unittest.TestCase):
             else:
                 path.write_text(f"---\nname: {agent['name']}\n---\nRead {{{{SKILLS_ROOT}}}}/review-agent/SKILL.md.\n")
         self.home = self.base / "test home"
+        # The person's own runtime roots must never reach a fixture install.
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        for name in ("CODEX_HOME", "CLAUDE_CONFIG_DIR"):
+            os.environ.pop(name, None)
         self.locations = install.Locations(self.home, self.home / ".codex", self.home / ".claude")
 
     def plan(self, **kwargs):
@@ -256,7 +262,7 @@ class InstallerTests(unittest.TestCase):
         shutil.copytree(self.root, next_root)
         self.perform(root=next_root)
         self.assertEqual(adopted.resolve(), next_root / "skills/github-create-pr")
-        self.assertIn(str(next_root / "skills"), (self.locations.codex / "agents/review-lens.toml").read_text())
+        self.assertIn((next_root / "skills").as_posix(), (self.locations.codex / "agents/review-lens.toml").read_text())
         self.perform(root=self.root)
         self.assertEqual(self.locations.receipt.read_bytes(), original)
         self.perform(uninstall=True)
@@ -451,7 +457,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.plan(locations=via_real).changes, [])
         self.assertEqual(self.plan(locations=via_alias).changes, [])
         receipt = json.loads(via_real.receipt.read_text())
-        self.assertTrue(all(key.startswith(f"{real}/") for key in receipt["entries"]), list(receipt["entries"]))
+        self.assertTrue(all(key.startswith(f"{real}{os.sep}") for key in receipt["entries"]), list(receipt["entries"]))
         self.perform(locations=via_real, uninstall=True)
         self.assertFalse((real / ".agents/skills/github-create-pr").is_symlink())
         self.assertFalse(via_alias.receipt.exists())
@@ -727,6 +733,28 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         with self.assertRaisesRegex(install.InstallError, f"Destination changed after an interrupted install; restore its journaled state before proceeding: {re.escape(str(link))}"):
             self.plan()
         self.assertEqual(os.readlink(link), "edited after crash")
+
+    def test_windows_reads_its_own_link_and_mode_spelling_as_the_recorded_state(self):
+        with patch.object(install, "WINDOWS", True), patch.object(install.os, "readlink") as readlink:
+            readlink.return_value = "\\\\?\\C:\\checkout\\skills\\codex"
+            self.assertEqual(install.link_target(Path("link")), "C:\\checkout\\skills\\codex")
+            readlink.return_value = "\\\\?\\UNC\\server\\share\\skills\\codex"
+            self.assertEqual(install.link_target(Path("link")), "\\\\server\\share\\skills\\codex")
+            readlink.return_value = "relative target"
+            self.assertEqual(install.link_target(Path("link")), "relative target")
+            recorded = {"kind": "file", **install.State("file", b"agent").fingerprint(), "mode": 0o644}
+            self.assertTrue(install.owned_matches(recorded, install.State("file", b"agent", 0o666)))
+            self.assertFalse(install.owned_matches(recorded, install.State("file", b"agent", 0o444)))
+            self.assertEqual(install.State("file", b"receipt", 0o600), install.State("file", b"receipt", 0o666))
+
+    def test_liveness_check_never_signals_the_journal_pid(self):
+        # On Windows os.kill(pid, 0) is TerminateProcess, so it must not be the probe.
+        with patch.object(install.os, "kill") as kill, \
+                patch.object(install.provider_runtime, "alive", return_value=True) as alive:
+            self.assertTrue(install.process_running(os.getpid() + 1))
+            self.assertFalse(install.process_running(os.getpid()))
+        kill.assert_not_called()
+        alive.assert_called_once_with(os.getpid() + 1)
 
     def test_journal_of_a_running_install_is_never_taken_over(self):
         self.locations.lock.mkdir(parents=True)

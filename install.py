@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -29,6 +30,25 @@ ROOT = Path(__file__).resolve().parent
 RUNTIMES = {"codex", "claude"}
 NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,63}\Z")
 ENTRY_KINDS = {"file", "symlink", "absent"}
+WINDOWS = os.name == "nt"
+_spec = importlib.util.spec_from_file_location("sentifold_provider_runtime", ROOT / "lib/provider_runtime.py")
+provider_runtime = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(provider_runtime)
+
+
+def platform_mode(mode: int) -> int:
+    """Windows keeps one permission bit, read-only, so only that bit can be compared."""
+    if WINDOWS:
+        return 0o666 if mode & stat.S_IWUSR else 0o444
+    return mode
+
+
+def link_target(path: Path) -> str:
+    """Windows may report an absolute target with the extended-path prefix the installer never wrote."""
+    target = os.readlink(path)
+    if WINDOWS and target.startswith("\\\\?\\"):
+        return "\\\\" + target[8:] if target.startswith("\\\\?\\UNC\\") else target[4:]
+    return target
 
 
 class InstallError(Exception):
@@ -40,6 +60,9 @@ class State:
     kind: str
     value: str | bytes = ""
     mode: int = 0o644
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "mode", platform_mode(self.mode))
 
     def fingerprint(self) -> dict:
         result = {"kind": self.kind}
@@ -59,7 +82,7 @@ def snapshot(path: Path) -> State:
     except FileNotFoundError:
         return ABSENT
     if stat.S_ISLNK(info.st_mode):
-        return State("symlink", os.readlink(path))
+        return State("symlink", link_target(path))
     if stat.S_ISREG(info.st_mode):
         return State("file", path.read_bytes(), stat.S_IMODE(info.st_mode))
     return State("other")
@@ -235,19 +258,13 @@ def load_journal(path: Path) -> dict | None:
 
 
 def process_running(pid: int) -> bool:
-    if pid == os.getpid():
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+    # On Windows os.kill(pid, 0) terminates the process; provider_runtime asks without signalling.
+    return pid != os.getpid() and provider_runtime.alive(pid)
 
 
 def owned_matches(entry: dict, state: State) -> bool:
-    return all(entry.get(key) == value for key, value in state.fingerprint().items()) and entry["kind"] == state.kind
+    recorded = {**entry, "mode": platform_mode(entry["mode"])} if "mode" in entry else entry
+    return all(recorded.get(key) == value for key, value in state.fingerprint().items()) and entry["kind"] == state.kind
 
 
 def restore_state(entry: dict) -> State:
@@ -493,6 +510,8 @@ def write_state(path: Path, state: State) -> None:
             with os.fdopen(fd, "wb") as stream:
                 stream.write(state.value)
             temporary.chmod(state.mode)
+        if WINDOWS and path.is_symlink():
+            path.unlink()  # Windows refuses to replace a directory link in place.
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
