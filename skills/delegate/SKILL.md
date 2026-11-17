@@ -2,7 +2,7 @@
 name: delegate
 disable-model-invocation: true
 argument-hint: "<task>"
-description: "Opt-in workflow for Claude Code that takes one medium task — one PR in one repository — to a validated, reviewed, tested draft PR in two layers: the invoking session, on whatever model the person started it on, designs, writes the spec, judges the diff and lands; Codex, through the installed codex skill, reads the code, writes it, fixes it and gives the diff its second read. No lanes, no linked sessions, no reviewer fan-out. Use ONLY when the caller explicitly names `delegate` or invokes `/delegate`, or explicitly asks for this spec -> Codex writes -> the session reviews loop by description. It chains github-create-pr, review-agent's light pass as its final gate, and the live-test executor the project profile names for the surface under change. Do NOT auto-trigger from ordinary 'plan and implement' / feature / bugfix requests — those follow the project's AGENTS.md default behavior. Explicit invocation in any language counts (e.g. 'прогони задачу через delegate'); a generic 'implement this' does not. A scope that needs several PRs, a second repository or a conditional gate stops and names `/orchestrate-linked-sessions` or `/orchestrate`."
+description: "Opt-in workflow for Claude Code that takes one medium task — one PR in one repository — to a validated, reviewed, tested draft PR in two layers: the invoking session, on whatever model the person started it on, designs, writes the spec, judges the diff and lands; Codex, through the installed codex skill, reads the code, writes it, fixes it and gives the diff its second read. No lanes, no linked sessions, no reviewer fan-out. Use ONLY when the caller explicitly names `delegate` or invokes `/delegate`, or explicitly asks for this spec -> Codex writes -> the session reviews loop by description. It chains github-create-pr, review-agent's light pass as its final gate, and the live-test executor the project profile names for the surface under change. Do NOT auto-trigger from ordinary 'plan and implement' / feature / bugfix requests — those follow the project's AGENTS.md default behavior. Explicit invocation in any language counts (e.g. 'прогони задачу через delegate'); a generic 'implement this' does not. A scope that needs several PRs, a second repository or a conditional gate stops and names `/orchestrate`."
 ---
 
 # Delegate
@@ -37,8 +37,8 @@ reverts as a unit, a design one spec can carry. Say at intake which it is:
   do it as the project's instructions say.
 - **Larger** — slices or a stack, a second repository, or a conditional gate
   the project profile defines (a platform host, a performance-critical
-  surface, cross-platform risk): stop and name `/orchestrate-linked-sessions`
-  (the Claude desktop app) or `/orchestrate`. A task found to be larger midway
+  surface, cross-platform risk): stop and name `/orchestrate`
+  (the Claude desktop app). A task found to be larger midway
   stops the same way, with what is built so far as that run's adopted work.
 
 ## Trigger (opt-in)

@@ -1,5 +1,5 @@
 name = "review-orchestrator"
-description = "Run the review-agent orchestrator for an explicit review-agent invocation or a named gate of an explicitly invoked workflow (orchestrate's Final Review gate). Resolve scope, check capabilities, run checks, select lenses, inspect them yourself (light, the default) or fan out review-lens children (heavy), run the cross-provider leg, validate findings, and return COMPLETE or INCOMPLETE with evidence. Never spawn from ordinary review intent."
+description = "Run the review-agent orchestrator for an explicit review-agent invocation. Resolve scope, check capabilities, run checks, select lenses, inspect them yourself (light, the default) or fan out review-lens children (heavy), run the cross-provider leg, validate findings, and return COMPLETE or INCOMPLETE with evidence. Never spawn from ordinary review intent."
 
 developer_instructions = '''
 You are the review orchestrator defined by {{SKILLS_ROOT}}/review-agent/SKILL.md.

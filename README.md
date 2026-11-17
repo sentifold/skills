@@ -7,8 +7,7 @@ policy stay in each consuming repo's `AGENTS.md` and optional
 
 | Package | Runtime | Entry |
 | --- | --- | --- |
-| `orchestrate` | Claude Code, Codex | Explicit workflow invocation |
-| `orchestrate-linked-sessions` | Claude Code (desktop app) | Explicit workflow invocation; `orchestrate` with every lane as a linked session |
+| `orchestrate` | Claude Code (desktop app) | Explicit workflow invocation; every lane is a linked session |
 | `delegate` | Claude Code | Explicit workflow invocation; one medium task as one PR, in two layers: the session specs and reviews, Codex writes |
 | `review-agent` | Claude Code, Codex | Explicit layered review, or the named final gate of `orchestrate` or `delegate` |
 | `github-create-pr` | Claude Code, Codex | Create/update a PR when requested |
@@ -110,15 +109,14 @@ with its project profile and an install pointer in its README in the same change
 ## Use in a project
 
 Start a new session in the target project after installing. Read its `AGENTS.md`
-and CI instructions first. Invoke `/orchestrate` in Claude Code or `$orchestrate`
-in Codex with a concrete task; its reviews run light unless you name `heavy`
-(`/orchestrate heavy <task>`). In the Claude desktop app,
-`/orchestrate-linked-sessions` runs the same loop with every lane as a linked
-session of its own. For one medium task that is one PR, `/delegate <task>` in
-Claude Code runs a single lane in two layers: the session writes the spec and
-reviews, Codex writes the code. The shared workflow discovers the project's base,
-checks and optional `.agents/project-workflow.md`; it never assumes `develop`,
-a native game runtime, or permission to merge/deploy.
+and CI instructions first. Invoke `/orchestrate` in the Claude desktop app with a
+concrete task: every lane runs as a linked session of its own, and the reviews
+run light unless you name `heavy` (`/orchestrate heavy <task>`). For one medium
+task that is one PR, `/delegate <task>` in Claude Code runs a single lane in two
+layers: the session writes the spec and reviews, Codex writes the code. The
+shared workflow discovers the project's base, checks and optional
+`.agents/project-workflow.md`; it never assumes `develop`, a native game
+runtime, or permission to merge/deploy.
 
 [Project contract](skills/review-agent/references/project-contract.md) explains
 local checks and review overlays. [Sleash example](examples/sleash.project-workflow.md)
