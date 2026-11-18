@@ -15,7 +15,7 @@ Codex, through the installed `codex` skill, is the second: it reads the code,
 writes it, fixes it and gives the diff its second read. It is `orchestrate`
 for a scope that is a single lane: the same gates in the same order, without
 lanes, linked sessions or a reviewer fan-out, because the session is its own
-first reader and one fresh pass reads the finished change.
+first reader and one fresh pass reads the whole change.
 
 **What this file optimizes.** The session's tokens at constant rigor. The
 session is the expensive engine and pays for its whole context again on every
@@ -88,7 +88,7 @@ consent boundary.
 | Where the design lands in the code, and what is wrong with it | Codex | one read-only run |
 | Implementation, fixes included | Codex | a write handoff from a spec the session writes; by hand only a trivial edit (a word, a caption, a conflict resolution, a one-line revert) |
 | The second read of the diff | Codex | a read-only run of its own, in a fresh context |
-| The final review of the finished change | a `review-orchestrator` subagent of the session | `review-agent`'s light pass, with a Codex leg of its own |
+| The final review of the whole change | a `review-orchestrator` subagent of the session | `review-agent`'s light pass, with a Codex leg of its own |
 | A hands-on live run | a subagent of the session | the executor the profile names for the surface |
 
 Read the `codex` skill's [`SKILL.md`](../codex/SKILL.md) and its
@@ -224,7 +224,7 @@ It carries, in this order:
 Spec
 - goal: <the outcome, and the size it should come to>
 - not in scope: <the excluded work, and the mechanisms the design refused>
-- edits: <each one as the place today (`file:line`) and what is wanted there; the mechanism to reuse, by name>
+- edits: <each one as the place today (`file:line`) and what is wanted there; the mechanism to reuse, by name; for a mechanism an edit removes or replaces, what it was for and what does that now>
 - constraints: <the project rules that bind these edits, by path: the laws, invariants and conventions of the touched topics>
 - behavior: <the cases as a before/after table, success and failure paths>
 - tests: <the approved new scenarios by name, and their count; the existing tests that must stay green>
@@ -293,7 +293,12 @@ one.
 
 **Three write rounds in all**, the first implementation included, unless the
 person names another number. Whatever changes behavior spends one: a review
-fix, a live-test fix, a final-review fix, a floor fix. A change the person asks for after seeing
+fix, a live-test fix, a final-review fix, a floor fix. So when a fix is
+owed, one round is left and phase 5's review has not run, run it first, on
+the committed head, and let that round carry the review's confirmed
+findings too (observed: a run did so with a live finding owed, and its
+third round settled the review's three findings with it).
+A change the person asks for after seeing
 the product is a round of its own, outside that count: their asking is its
 word. A trivial leftover the session fixes by hand. Work still needed when
 the rounds are spent, the two reads in conflict on a material point, or a fix
@@ -343,10 +348,11 @@ the checks, the delta read — before the retest.
    quote what they rely on — the Design run's verdict, the rounds and what
    each read found, the live tier and verdict — and link nothing under the
    worktree, which does not outlive the session.
-3. **Start the two things the final head needs, in one message**, and edit
-   nothing until both are in:
+3. **Start what the final head still needs, in one message**, and edit
+   nothing until it is in:
    - **The readiness floor** the profile names, on the final pushed head.
-   - **The final review**: `review-agent`'s light pass over the whole change
+   - **The final review**, unless it already ran: `review-agent`'s light
+     pass over the whole change
      (`<base-sha>...HEAD`), by one fresh `review-orchestrator` subagent that
      has seen neither the spec nor the rounds. It picks the lenses the
      change calls for, inspects them itself and runs a Codex leg of its own
@@ -356,7 +362,8 @@ the checks, the delta read — before the retest.
      `light`, the profile, the Codex model and effort this run resolved, what
      the two reads covered with any range neither read, and the change's
      stated limitations. Its result is the whole
-     report, opening with `REVIEW COMPLETE` or `REVIEW INCOMPLETE`: save it
+     report, opening with `REVIEW COMPLETE` or `REVIEW INCOMPLETE`, returned
+     as text: the pass writes no report file, so ask for none and save it
      in the run's folder. A pass that returned anything else, or that a
      limit cut off, is resumed as `review-agent` says, on the same model.
 4. **Settle what they found.** The pass's findings are verified like any
