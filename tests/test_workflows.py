@@ -392,6 +392,28 @@ class WorkflowPackageTests(unittest.TestCase):
         for project_only in ("game_build", "develop`", "sentifold/cloud", "THGAMES_", "games-ts/"):
             self.assertNotIn(project_only, text)
 
+    def test_orchestrate_runs_in_the_desktop_app_or_hapi_and_stops_elsewhere(self):
+        text = (ROOT / "skills/orchestrate/SKILL.md").read_text(encoding="utf-8")
+        runtime = text.split("## Runtime\n", 1)[1].split("\n## Roots and the project profile", 1)[0]
+        for desktop in ("mcp__ccd_session__start_session", "`SendMessage`", "`local_…` id",
+                        "mcp__ccd_session_mgmt__stop_session"):
+            self.assertIn(desktop, runtime)
+        for hapi in ("mcp__hapi__spawn_peer", "`HAPI_SESSION_ID`", "`ping_peer`", "`inspect_peer`",
+                     "`list_peers`", "`sessionType: worktree`", "`<run>/<lane>`", "`permissionMode` the driver's own",
+                     "/api/sessions/<uuid>/archive", "/api/sessions/<uuid>/reopen", "cliApiToken"):
+            self.assertIn(hapi, runtime)
+        self.assertIn("stop and say the run needs the\nClaude desktop app or a HAPI session", runtime)
+        self.assertIn("could not say which session owns a\nlane", runtime)
+        for trap in ("A spawn can time out and still start the session",
+                     "Inactive is not lost", "A HAPI restart kills in-process work, not sessions",
+                     "cannot connect restarts the session", "cut from the checkout's head"):
+            self.assertIn(trap, runtime)
+        self.assertIn("HAPI refuses no start", text)
+        self.assertIn("`git switch -c <branch> <start-sha>`", text)
+        self.assertIn("`$HAPI_SESSION_ID`), where every changed state line goes", text)
+        template = PROFILE_TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn("- MCP servers a lane disables:", template)
+
     def test_profile_template_and_examples_carry_every_contract_section(self):
         profiles = [PROFILE_TEMPLATE, *sorted((ROOT / "examples").glob("*.md"))]
         self.assertGreaterEqual(len(profiles), 2)

@@ -7,7 +7,7 @@ policy stay in each consuming repo's `AGENTS.md` and optional
 
 | Package | Runtime | Entry |
 | --- | --- | --- |
-| `orchestrate` | Claude Code (desktop app) | Explicit workflow invocation; every lane is a linked session |
+| `orchestrate` | Claude Code (desktop app or HAPI) | Explicit workflow invocation; every lane is a linked session |
 | `delegate` | Claude Code | Explicit workflow invocation; one medium task as one PR, in two layers: the session specs and reviews, Codex writes |
 | `review-agent` | Claude Code, Codex | Explicit layered review, or the named final gate of `orchestrate` or `delegate` |
 | `github-create-pr` | Claude Code, Codex | Create/update a PR when requested |
@@ -109,8 +109,9 @@ with its project profile and an install pointer in its README in the same change
 ## Use in a project
 
 Start a new session in the target project after installing. Read its `AGENTS.md`
-and CI instructions first. Invoke `/orchestrate` in the Claude desktop app with a
-concrete task: every lane runs as a linked session of its own, and the reviews
+and CI instructions first. Invoke `/orchestrate` in the Claude desktop app or a
+HAPI session with a concrete task: every lane runs as a linked session of its
+own (in HAPI, a peer session in a worktree of its own), and the reviews
 run light unless you name `heavy` (`/orchestrate heavy <task>`). For one medium
 task that is one PR, `/delegate <task>` in Claude Code runs a single lane in two
 layers: the session writes the spec and reviews, Codex writes the code. The
