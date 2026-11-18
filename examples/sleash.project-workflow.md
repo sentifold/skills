@@ -42,6 +42,7 @@ Read this alongside `AGENTS.md` and the Makefile.
 - Setup: `git worktree add <absolute-path> -b <branch> main` and nothing
   else.
 - Known traps: none documented.
+- MCP servers a lane disables: none.
 
 ## Verification by changed surface
 

@@ -1,6 +1,6 @@
 # Sentifold skills onboarding
 
-Goal: `/orchestrate` in the Claude desktop app works in a participant's own
+Goal: `/orchestrate` in the Claude desktop app or a HAPI session works in a participant's own
 project, including its checks and an independent review, without a gamejam
 checkout.
 
@@ -72,8 +72,10 @@ inside the project checkout.
    `config.toml`: the user-level `~/.codex/config.toml` (checked by `doctor`) or
    the project's `.codex/config.toml` (not read by `doctor`). Claude Code needs
    no configuration.
-4. **Smoke.** Open a new session in the project in the Claude desktop app and
-   run `/orchestrate` on a tiny documentation change.
+4. **Smoke.** Open a new session in the project in the Claude desktop app or
+   HAPI and run `/orchestrate` on a tiny documentation change. In HAPI, a
+   project whose `.mcp.json` server cannot connect names in its profile the
+   setting that disables it in each lane worktree.
    Expected: the agent reads the profile and names the project's base and
    checks; it records `not-applicable:` with a reason for the runtime smoke;
    Final Review runs both provider legs or ends honestly with

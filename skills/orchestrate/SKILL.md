@@ -2,7 +2,7 @@
 name: orchestrate
 disable-model-invocation: true
 argument-hint: "[light|heavy] <task>"
-description: "Opt-in orchestration workflow for Claude Code in the Claude desktop app that turns a scope into right-sized, cross-provider-validated, reviewed, clean-state-tested draft PRs landing directly on the target project's base branch, with every lane built by a linked session of its own. The invoking session drives the work, each lane session runs its gates and its reviewer subagents, and Codex is the other engine through the installed codex skill. Use ONLY when the caller explicitly names `orchestrate` or invokes `/orchestrate`, or explicitly asks for this plan -> validate -> lanes as linked sessions -> review -> test workflow. It chains github-create-pr, the live-test executor the project profile names for the surface under change, the project's profiling route, review-agent, and the project's cross-platform tooling. Do NOT auto-trigger from ordinary 'plan and implement' / feature / bugfix requests — those follow the project's AGENTS.md default behavior; this is the heavyweight gated pipeline, opt-in only. Explicit invocation in any language counts (e.g. 'прогони задачу через orchestrate'); a generic 'implement this' does not. Outside the desktop app it stops and says it needs the app."
+description: "Opt-in orchestration workflow for Claude Code in the Claude desktop app or a HAPI session that turns a scope into right-sized, cross-provider-validated, reviewed, clean-state-tested draft PRs landing directly on the target project's base branch, with every lane built by a linked session of its own. The invoking session drives the work, each lane session runs its gates and its reviewer subagents, and Codex is the other engine through the installed codex skill. Use ONLY when the caller explicitly names `orchestrate` or invokes `/orchestrate`, or explicitly asks for this plan -> validate -> lanes as linked sessions -> review -> test workflow. It chains github-create-pr, the live-test executor the project profile names for the surface under change, the project's profiling route, review-agent, and the project's cross-platform tooling. Do NOT auto-trigger from ordinary 'plan and implement' / feature / bugfix requests — those follow the project's AGENTS.md default behavior; this is the heavyweight gated pipeline, opt-in only. Explicit invocation in any language counts (e.g. 'прогони задачу через orchestrate'); a generic 'implement this' does not. Elsewhere it stops and says it needs the desktop app or HAPI."
 ---
 
 # Orchestrate
@@ -14,8 +14,8 @@ quickly as possible: independent sub-tasks execute as **concurrent lanes**,
 questions batch into single round-trips, and PRs go ready the moment their
 gates clear. This is an orchestrator: it owns the planning, scheduling, gates, and
 delivery coordination while driving the installed shared skills and the target
-project's own skills. It runs in Claude Code in the Claude desktop app,
-which can start **linked sessions**: the session the person
+project's own skills. It runs in Claude Code in the Claude desktop app or in
+a HAPI session, both of which can start **linked sessions**: the session the person
 invoked it in is the **driver** — intake, the Design gate, the whole-scope
 gates and landing — and every lane is a **linked session** of its own, in its
 own worktree, that implements, reviews and tests its slice and reports back;
@@ -30,21 +30,108 @@ removes friction a run actually met, and names that friction.
 
 ## Runtime
 
-The driver needs the desktop app's session tools: the one that starts a
-linked session (`mcp__ccd_session__start_session`, with
-`mcp__ccd_session__list_start_targets` for the places it may start in),
-messaging between
-sessions (`SendMessage`, addressed by a session's `local_…` id: a lane's from
-`start_session`'s result, the driver's own from `get_session` with `self`; a
-lane's `name` is not an address, and a send to it is refused), and the
-listing and stopping of linked sessions (`mcp__ccd_session_mgmt__list_sessions`
-with `linked`, `mcp__ccd_session_mgmt__stop_session`). Check they are exposed
-before intake. Where they are not — the terminal, VS Code, Codex — stop and
-say the run needs the Claude desktop app. The driver never schedules a lane
-itself instead, because a run that mixed such lanes with linked sessions
-could not say which session owns a lane. A start is
-refused in a turn that another session's message or an automated event began,
-so lanes start only in turns the person began.
+The driver needs session tools from one of two runtimes. Check which before
+intake, with a tool search where tools are deferred:
+
+- **The Claude desktop app** — `mcp__ccd_session__start_session` is exposed.
+  The tools: the one that starts a linked session (`start_session`, with
+  `mcp__ccd_session__list_start_targets` for the places it may start in),
+  messaging between sessions (`SendMessage`, addressed by a session's
+  `local_…` id: a lane's from `start_session`'s result, the driver's own from
+  `get_session` with `self`; a lane's `name` is not an address, and a send to
+  it is refused), and the listing, stopping and archiving of linked sessions
+  (`mcp__ccd_session_mgmt__list_sessions` with `linked`,
+  `mcp__ccd_session_mgmt__stop_session`, `…__archive_session`).
+- **HAPI** — no desktop tools, but `mcp__hapi__spawn_peer` is exposed and
+  `HAPI_SESSION_ID` is set. A lane is a peer session the driver spawns; the
+  [HAPI mapping](#hapi-sessions) below gives each desktop tool's counterpart.
+
+With neither — the terminal, VS Code, Codex — stop and say the run needs the
+Claude desktop app or a HAPI session. One run keeps one runtime from intake
+to closure. The driver never schedules a lane itself instead, because a run
+that mixed such lanes with linked sessions could not say which session owns a
+lane. In the desktop app a start is refused in a turn that another session's
+message or an automated event began, so lanes start only in turns the person
+began; HAPI refuses no start, and the driver keeps the rule there with one
+named departure, a parent session's relay (see
+[phase 3](#3--implement-in-a-lane-session)).
+
+Wherever this file names a desktop tool or a `local_…` id, a HAPI run uses
+its row below; the rest of the loop is the same in both.
+
+### HAPI sessions
+
+| Need | Desktop | HAPI |
+|------|---------|------|
+| The driver's own address | `get_session` with `self` | `$HAPI_SESSION_ID`, a full UUID |
+| Start a lane | `start_session`, `use_worktree: true` | `spawn_peer`: `directory` the repository's main checkout, `sessionType: worktree`, `name` `<run>/<lane>`, `model` and `effort` the lane's pair, `permissionMode` the driver's own (the `permissionMode` of its session record, below), `message` the brief and then the background |
+| Start a lane in another repository | `cwd` a place `list_start_targets` names | `directory` that repository's checkout, an absolute path the driver checked with `git -C <path> rev-parse --show-toplevel` |
+| A lane's address | the `local_…` id in the result | the session UUID in `spawn_peer`'s result, never the `name`; the ledger keeps it with its `/sessions/<uuid>` link |
+| Message a lane, or the driver | `SendMessage` | `ping_peer` with the full UUID and `deliveryMode: queue`; it resumes an inactive session and starts a turn in an idle one |
+| Halt a lane's turn in flight | `stop_session` | archive it (below), and read `lifecycle: archived` with `inspect_peer` before going on; a message, steered or not, ends no subagent, Codex run or background task |
+| List the family, read a lane's state | `list_sessions` with `linked` | the ledger's UUIDs, each through `inspect_peer` (`active`, `thinking`, `lifecycle`, `cwd`, recent text); `list_peers` has no family filter |
+| Stop a lane | `stop_session` | archive it (below): its process ends, its worktree and branch stay |
+| Archive a finished lane | `archive_session` | archive it (below) |
+| Bring an archived lane back | — | `POST /api/sessions/<uuid>/reopen` with the same token, then `ping_peer` its next step; the lane first re-checks what the archive killed |
+| Change a running lane's pair | `set_session_model`, `set_session_effort` | no tool: the person changes it in HAPI |
+| Wake the driver when a lane is done | `wake_when_done: true` | none: the lane's state line by `ping_peer` is the only wake |
+| Follow a lane's PR | the app's PR monitor | none: the lane checks its CI itself, in bounded `gh pr checks` waits |
+
+The session record, archiving and reopening go through the hub's API, with
+the CLI token from `~/.hapi/settings.json` and the hub's address in
+`$HAPI_API_URL`, else that file's `apiUrl`:
+
+```sh
+SETTINGS='import json,os;s=json.load(open(os.path.expanduser("~/.hapi/settings.json")))'
+HUB=${HAPI_API_URL:-$(python3 -c "$SETTINGS;print(s['apiUrl'])")}
+TOKEN=$(python3 -c "$SETTINGS;print(s['cliApiToken'])")
+JWT=$(curl -sf -m 30 -X POST "$HUB/api/auth" -H 'content-type: application/json' \
+  -d "{\"accessToken\":\"$TOKEN\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+curl -sf -m 30 "$HUB/api/sessions/$HAPI_SESSION_ID" -H "authorization: Bearer $JWT" \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["session"]["permissionMode"])'
+curl -sf -m 30 -X POST "$HUB/api/sessions/<uuid>/archive" -H "authorization: Bearer $JWT" \
+  | python3 -c 'import sys,json;assert json.load(sys.stdin)["ok"] is True'
+```
+
+A failed call is a failed stop, never assumed done. The token never enters a
+message, a record or a log. HAPI's traps:
+
+- **A spawn can time out and still start the session.** `spawn_peer` gives up
+  after about 60 seconds while the hub goes on creating the session. Never
+  call it twice for one lane, and never adopt a session by its name alone:
+  within a bounded wait of a few minutes, `list_peers` for the run-specific
+  name `<run>/<lane>` and `inspect_peer` each match; the lane's session is the
+  one whose `cwd` is a new worktree of that lane's repository, created after
+  the call. Record its UUID before sending it anything. A session there with
+  no user message is a failed spawn that still holds a worktree: `ping_peer`
+  it the brief and read the brief's arrival with `inspect_peer`, or archive
+  it. Only a lane absent from the list when the wait ends is spawned again.
+- **Inactive is not lost.** `active=false` means the session's process is not
+  running; an idle lane can show it, and a message resumes it.
+  `thinking=true` means a turn is in flight, and a queued message waits for
+  its end. A lane is silent only when `inspect_peer` shows no turn and no
+  state line since the driver's last message.
+- **A HAPI restart kills in-process work, not sessions.** A restart of the
+  runner or of a session's wrapper ends that session's subagents and
+  background tasks; the peer sessions survive, and idle ones come back
+  archived and resumed. After one, the driver reads every lane with
+  `inspect_peer`, each lane re-checks what it had in flight (a Codex run, a
+  reviewer, a build) and starts again what was lost, and no killed leg counts
+  as a result.
+- **A project MCP server that cannot connect restarts the session before
+  every message**, which kills its subagents each time. A lane in such a
+  project disables that server in its worktree before it launches anything;
+  the project profile's "Worktrees" section names the server and the
+  setting (in gamejam,
+  `.claude/settings.local.json` holding
+  `{"disabledMcpjsonServers":["thgames"]}`, gitignored and so missing from
+  every new worktree).
+- **The worktree is cut from the checkout's head, on HAPI's branch.**
+  `sessionType: worktree` makes a folder `<repo>-worktrees/<MMDD-xxxx>` on a
+  branch `hapi-<MMDD-xxxx>` at the head of `directory`'s checkout, not at the
+  lane's start, so the lane's first git step is
+  `git switch -c <branch> <start-sha>` (see [Running a lane](#running-a-lane)).
+  The ledger takes the worktree path from the lane's `cwd` in `inspect_peer`.
 
 **One scope per driver session.** The session the person invoked the skill in
 drives this scope and no other: the run ends at closure, and a follow-up, a
@@ -107,7 +194,9 @@ skill's separate consent boundary. Record the chosen routes in the gate plan.
 
 Use this skill only when:
 - the user explicitly names `orchestrate` or invokes
-  `/orchestrate`, in Claude Code in the Claude desktop app
+  `/orchestrate`, in Claude Code in the Claude desktop app or a HAPI session
+  (a HAPI parent session's message relaying the person's `/orchestrate` is
+  that invocation)
 - the user asks for this plan -> validate -> lanes as linked sessions ->
   review -> test workflow by description
 
@@ -142,7 +231,7 @@ tasks follow the default "smallest direct change" behavior, not this ceremony.
   any lane has ready work, start that work before waiting. Before any
   stop-and-ask, bring every other lane to a running state so the wait overlaps
   machine work instead of freezing it. A lane is never waited on: the driver
-  ends its turn and the app continues it when the lanes report, and a lane
+  ends its turn and the runtime continues it when the lanes report, and a lane
   that needs an answer sooner messages it.
 - **Delegate for isolation, not lower quality.** A lane is a session, not a
   subagent: it keeps a context of its own across turns and hands the driver
@@ -157,7 +246,9 @@ tasks follow the default "smallest direct change" behavior, not this ceremony.
   the lane's pair. The person may name another pair for a lane, at its start
   or later: the driver passes it to `start_session`, or sets it with
   `set_session_model` and `set_session_effort` on a running lane and for a
-  pair above its own, which `start_session` cannot start. Every session and
+  pair above its own, which `start_session` cannot start; in HAPI it passes
+  the pair to `spawn_peer`, and a running lane's pair is the person's to
+  change. Every session and
   child inherits the person's permission mode. Never pin a delegated role to
   another model or effort on your own. The profile's Claude leg is the
   cross-provider helper's setting for a Codex driver, not these children's.
@@ -301,7 +392,8 @@ is bookkeeping, and only these four things:
   own conventions — each repo's profile or CI instructions name them; the
   other repo's `AGENTS.md` and profile do not apply to it. A lane in the
   other repository is a session started in that repository's folder (`cwd`,
-  a place `list_start_targets` names), with its own worktree there.
+  a place `list_start_targets` names; in HAPI, that checkout as `directory`),
+  with its own worktree there.
 - **The Final Review gate runs once per repo**, not once per scope. Hand each
   run the other repo's worktree as read-only context so the lens that owns
   contracts can read both sides of the wire.
@@ -361,7 +453,8 @@ skill**, "PR Chains"). Follow the project profile's branch-naming
 policy: the app names a lane's branch from the slug the driver passes, under
 the person's branch prefix and with a suffix of its own, so pass the slug
 that gives the name the policy wants, and take the final name from the lane's
-first report.
+first report. In HAPI the lane names its branch itself, so the brief carries
+the whole name the policy wants.
 
 Each PR gets a clear description. Add a diagram only when it materially shortens
 the explanation, following the **`github-create-pr` skill**: use a minimal
@@ -374,7 +467,8 @@ paragraph it clarifies.
 (from phase 3) — via the **`github-create-pr` skill**, with the base set to
 the project base (or the previous branch in a stacked chain), so the review and
 test gates attach to a real PR. The lane opens it from its worktree, and the
-app's PR monitor follows the session that opened it.
+app's PR monitor follows the session that opened it; in HAPI nothing does,
+and the lane checks its PR's CI itself.
 
 ### 3 — Implement in a lane session
 
@@ -384,7 +478,10 @@ person's invocation and their answers at intake are the ask), `context:
 fresh`, `use_worktree: true`, `source_branch` the lane's base, `branch_name`
 the slice's slug, `name` a short lane handle, `wake_when_done: true`, and
 the lane's `model` and `effort` (by default `claude-opus-5-5` and `medium`)
-— and the app cuts the worktree from the base. The lane
+— and the app cuts the worktree from the base. In HAPI the driver calls
+`spawn_peer` as [its row](#hapi-sessions) says, with `directory` the
+repository's main checkout, and the brief's `base` and `branch` tell the lane
+where to put its branch. The lane
 provisions it with whatever the project profile names (env seeding, LFS or
 submodule hydration, dependency installs, the project's worktree setup
 command). If that automation misfires, fix the hook installation rather than
@@ -437,7 +534,7 @@ turn's end (observed: five crossed in twenty minutes).
 **Check work in flight on the same surface before the Design gate.** Another session may already own
 part of the scope (observed: a sibling PR adding the same asset surfaced only in a live-test
 screenshot, after both designs were implemented). `gh pr list --search` over the touched paths, the
-runtime's agent listing (`ListAgents`) and the app's session list are cheap; an overlap found early is a
+runtime's agent listing (`ListAgents`) and the session list (`list_peers` in HAPI) are cheap; an overlap found early is a
 scope question, found late it is a restack.
 
 **Start lanes in turns the person began, within the cap.** A start is refused
@@ -450,10 +547,18 @@ scope at once, the ones beyond the concurrent-lane cap too. A lane within the
 cap whose base already holds what it builds on starts at once. Every other
 lane provisions its worktree, reports `ready` and parks: its warm build, its
 tests and its code wait for the driver's `go` (SendMessage, by the lane's
-session id), sent as a slot frees — and to a lane stacked on another lane, sent
+session id; `ping_peer` in HAPI), sent as a slot frees — and to a lane stacked on another lane, sent
 only once the predecessor's branch holds the implementation the design names,
 with `restack onto <that head>` first. Nothing is lost in the wait: the brief
-already carries the design as validated.
+already carries the design as validated. HAPI refuses no start, but its
+driver keeps the rule: it starts the scope's lanes in a turn the person began,
+never on a lane's message or a notification alone, so every lane traces to
+the person's word. One departure, since a HAPI driver is often itself a
+session another one spawned: a message from the driver's parent session (the
+`Parent` chip of its remit names it) that relays the person's invocation or
+their answer to this run's Hard Stop counts as the person's turn, and the
+driver records that message in the scope record. A relay from any other
+session, or one that names another scope, does not.
 
 The lane hands the work to a `codex` write run into
 its own worktree (`--cd` its worktree path). Any implementation handoff gets
@@ -982,7 +1087,7 @@ evidence path (`.local/orchestrate/<run>/lanes.md` by default), one row per
 lane: name, session, worktree path, base SHA, branch, PR, the last state line,
 and what the lane waits for. A lane's end-of-turn note reaches the driver only
 once every lane is quiet, so a lane sends its state line to the driver itself
-(SendMessage to the driver's session id, which its brief carries) whenever
+(SendMessage, or `ping_peer` in HAPI, to the driver's session id, which its brief carries) whenever
 anything the ledger holds changed — its phase or status, its head or base,
 its PR, what it waits for — or a request of the driver's is done; a freed
 slot, a new head or a finished lane must not wait for the others; a turn that
@@ -1034,10 +1139,12 @@ one.
 
 **Stopping.** The person's stop in the driver stops nothing in the lanes: list
 the linked sessions and stop each one (`list_sessions` with `linked`, then
-`stop_session`), and report what was stopped. A lane is finished when its PR
+`stop_session`; in HAPI, read each ledger UUID with `inspect_peer` and archive
+it), and report what was stopped. A lane is finished when its PR
 has merged and the driver has pushed that lane's closure to the notes ref: the
 driver archives it then, by its id with the PR as the reason
-(`mcp__ccd_session_mgmt__archive_session`), and the person's invocation is the
+(`mcp__ccd_session_mgmt__archive_session`, or the hub's archive call in
+HAPI), and the person's invocation is the
 word for that (observed: merged lanes stayed open in the sidebar until the
 person asked to archive them). Every other lane stays for the person to open,
 at closure too; archive one of those only on the person's word.
@@ -1127,8 +1234,9 @@ its checkpoint to the driver and parks, the other lanes keep running, and the
 driver puts it to the person and sends the lane their answer verbatim. A decision that
 could invalidate other lanes too — a scope-wide ambiguity, a shared-contract
 change, a defect the other lanes build on — is the driver's: it halts the
-lanes whose work in flight the answer could invalidate (`stop_session`; a
-message reaches a busy lane only when its turn ends), sends `pause` to the
+lanes whose work in flight the answer could invalidate (`stop_session`, or
+the archive call in HAPI, reopened with the answer; a message reaches a busy
+lane only when its turn ends and stops nothing it started), sends `pause` to the
 rest and waits for their `paused` state lines, then asks. Batch every
 decision pending at the driver into that one checkpoint — one round-trip, not
 one ask per lane. A reading that contradicts what the person says they did is
@@ -1210,7 +1318,7 @@ names live under `PROJECT_ROOT`.
 - platform host build / launch / verification (Platform gate, conditional): the profile's host executor
 - performance before/after captures (Performance gate, conditional): the profile's profiling route and executor
 - bounded waits + cross-platform parity (Cross-Platform gate, conditional): the profile's cross-platform tooling
-- worktrees & env: the app cuts a lane's worktree; the lane provisions it per
+- worktrees & env: the app or HAPI cuts a lane's worktree; the lane provisions it per
   the worktree guide the profile names
 
 ## Lanes as sessions
@@ -1234,7 +1342,8 @@ Lane brief
 - new tests: <each approved scenario by name, and their count>
 - standing rules: <the rules of the project's instructions and of the person's own, their words in this run included, that bear on this lane — e.g. which tests need whose approval and how to ask for it>
 - codex: <model, effort and sandbox from the profile's Provider policy; `--network` when the tests need it>
-- driver: <this session's id (`get_session` with `self`), where every changed state line goes; its PROJECT_ROOT, for the run's evidence paths>
+- runtime: <desktop | HAPI>; in HAPI, branch: <the lane's whole branch name>, start ref: <the sha the branch starts at: the base, or the driver's commit of adopted work>
+- driver: <this session's id (`get_session` with `self`, or `$HAPI_SESSION_ID`), where every changed state line goes; its PROJECT_ROOT, for the run's evidence paths>
 - rules: read `<SKILL_DIR>/SKILL.md`, "Running a lane", before anything else; then the profile, AGENTS.md and the laws from your own worktree
 ```
 
@@ -1253,15 +1362,21 @@ tests, about half its PR's lines, and the person had them cut to 24).
 A lane is a full session, with the person, the tools and the project's
 instructions; this file is its contract. Its order:
 
-1. **Set up.** Provision the worktree the app cut, as the profile's worktree
-   guide says; write the brief's spec to your own
+1. **Set up.** In HAPI, first, before any subagent or background task:
+   disable in the worktree the MCP servers the profile names, then
+   `git switch -c <branch> <start-sha>` with the brief's branch and start
+   ref, since HAPI cut the worktree on a `hapi-…` branch of its own at
+   another head; the base stays the brief's `base`, adopted work included.
+   Provision the worktree as the
+   profile's worktree guide says; write the brief's spec to your own
    `.local/orchestrate/<lane>/task.md`; read the profile, `AGENTS.md` and the
    laws the slice touches; record the base SHA. If the brief says wait, end
    the turn on the state line `ready` and write no code until `go`.
 2. **Implement** per phase 3 and the runtime mapping, then run the named tests,
    review `git diff`, commit,
    push, and open the draft PR against the brief's target (the
-   `github-create-pr` skill); the app's PR monitor follows this session.
+   `github-create-pr` skill); the app's PR monitor follows this session, and
+   in HAPI the lane follows CI itself, in bounded waits.
 3. **Gates**: the Code Review gate per phase 4, the Live Test gate per phase
    5, then the readiness floor the profile names, on the final head.
 4. **Report.** Every turn ends with one state line first, then a recap with

@@ -57,6 +57,9 @@ Name the worktree guide and the provisioning a fresh lane worktree needs.
   "nothing else">`.
 - Known traps: `<long hydration needing a background call, shared files to
   preserve, or "none">`.
+- MCP servers a lane disables: `<each project MCP server that cannot connect
+  in an unattended session, and the gitignored settings line that disables it
+  in a fresh worktree, or "none">`.
 
 ## Verification by changed surface
 
