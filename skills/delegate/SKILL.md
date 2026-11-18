@@ -86,10 +86,10 @@ consent boundary.
 |------|-----|-----|
 | The design, the spec, the person's decisions, the judgment of the diff, commits, the PR | the session | its own turns |
 | Where the design lands in the code, and what is wrong with it | Codex | one read-only run |
-| Implementation, fixes included | Codex | a write handoff from a spec the session writes; by hand only a trivial edit (a word, a caption, a conflict resolution, a one-line revert) |
+| Implementation, fixes included | Codex | a write handoff from a spec the session writes; by hand only a trivial edit (a word, a caption, a conflict resolution, a one-line revert) or a few lines that change no behavior, ten at most, noted in the scope record |
 | The second read of the diff | Codex | a read-only run of its own, in a fresh context |
 | The final review of the whole change | a `review-orchestrator` subagent of the session | `review-agent`'s light pass, with a Codex leg of its own |
-| A hands-on live run | a subagent of the session | the executor the profile names for the surface |
+| A hands-on live run or probe | a subagent of the session | the executor the profile names for the surface |
 
 Read the `codex` skill's [`SKILL.md`](../codex/SKILL.md) and its
 [runtime findings](../codex/references/runtime-findings.md) once, before the
@@ -135,9 +135,10 @@ how:
   run in one command.
 - **The diff is read whole once.** The first round's diff in full; after that
   only what a round adds.
-- **Hands-on work leaves the transcript.** A live run driven through a
-  browser, a device or a scripted call goes to a subagent that returns its
-  verdict.
+- **Hands-on work leaves the transcript.** Whatever is driven through a
+  browser, a device or a scripted call goes to a subagent: a live run
+  returns its verdict, and a probe the design is waiting on returns the
+  facts it was asked for.
 - **A wait costs no turns.** Every Codex run and every long check is one
   `Bash(run_in_background: true)` call, whose exit continues the session; the
   turn ends, or goes on with work that does not depend on it. Never a run
