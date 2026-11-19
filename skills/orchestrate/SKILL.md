@@ -901,7 +901,12 @@ person acts, with no new pass unless its code changes.
 **The pass reads a head that holds still.** Before the pass, the driver
 sends each lane it reads `pause` and waits for its `paused`, and sends `go`
 once the pass returns (observed twice in one run: a lane rebased while the
-Codex leg read its worktree). A head that a later rebase moves needs no new
+Codex leg read its worktree). A lane whose turn ended with nothing of its
+own running, its last state line waiting on the driver or the person, holds
+still already: the driver records that instead and sends it nothing that
+moves its head before the pass returns (observed: a `pause` would only have
+woken four lanes idle for hours to answer one word).
+A head that a later rebase moves needs no new
 pass when `git range-diff <old-base>..<old-head> <new-base>..<new-head>`
 shows the lane's hunks unchanged; a hunk it shows changed is re-reviewed
 like a fix.
@@ -1397,7 +1402,11 @@ instructions; this file is its contract. Its order:
    comment on its PR (`gh pr comment`) and its final state line names that
    comment, or carries the receipt itself when the lane has no PR, because
    the worktree folder is not kept for it (see
-   [Evidence outlives the worktree](#parallelization)).
+   [Evidence outlives the worktree](#parallelization)). The post is its
+   final text, since a comment keeps every earlier version, and names no
+   one found in a log or in infrastructure output (observed: a first post
+   named a colleague's cloud user name, and the edit that replaced it a
+   minute later left the name in the comment's history).
 
 **Keep the context lean.** A lane runs for hours and pays for its whole
 context on every turn (observed on the first run: two lanes of ~800 turns
