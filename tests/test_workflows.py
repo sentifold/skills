@@ -17,7 +17,7 @@ import install
 
 ROOT = Path(__file__).resolve().parents[1]
 SCOPE = ROOT / "skills/review-agent/scripts/resolve_scope.py"
-WORKFLOWS = ("orchestrate", "delegate", "review-agent", "github-create-pr", "claude-stock-code-review")
+WORKFLOWS = ("orchestrate", "delegate", "review-agent", "github-create-pr")
 PROFILE_TEMPLATE = ROOT / "templates/project-workflow.md"
 PROFILE_SECTIONS = (
     "Scope, branches and PRs",
@@ -313,7 +313,6 @@ class WorkflowPackageTests(unittest.TestCase):
 
     def test_github_create_pr_skill_is_portable_and_keeps_generic_rules(self):
         text = (ROOT / "skills/github-create-pr/SKILL.md").read_text()
-        self.assertNotIn("sentifold/gamejam", text)
         self.assertIsNone(re.search(r"\bdevelop\b", text), "base branch must come from the project")
         self.assertNotIn("verify-local.sh", text)
         self.assertNotIn("Linear", text)
@@ -354,7 +353,6 @@ class WorkflowPackageTests(unittest.TestCase):
         self.assertIn("visible `blocked:` gate, never a pass", text)
         self.assertIn("(../review-agent/references/project-contract.md)", text)
         self.assertIn("(../review-agent/references/lifecycle.md)", text)
-        self.assertIn("(../claude-stock-code-review/SKILL.md)", text)
 
     def test_orchestrate_keeps_its_gate_vocabulary_and_stop_shape(self):
         text = (ROOT / "skills/orchestrate/SKILL.md").read_text()
@@ -389,8 +387,7 @@ class WorkflowPackageTests(unittest.TestCase):
         self.assertNotIn("/Users/", text)
         self.assertNotIn("/home/", text)
         self.assertNotIn("$HOME/", text)
-        for project_only in ("game_build", "develop`", "sentifold/cloud", "THGAMES_", "games-ts/"):
-            self.assertNotIn(project_only, text)
+        self.assertNotIn("develop`", text)
 
     def test_orchestrate_runs_in_the_desktop_app_or_hapi_and_stops_elsewhere(self):
         text = (ROOT / "skills/orchestrate/SKILL.md").read_text(encoding="utf-8")
@@ -434,18 +431,18 @@ class WorkflowPackageTests(unittest.TestCase):
                 self.assertNotIn(home, text, path.name)
         template = PROFILE_TEMPLATE.read_text()
         self.assertIn("never\nimport another project's commands", template)
-        for project_only in ("game_build", "make check", "sentifold/gamejam", "THGAMES_", "develop`", "main`"):
+        for project_only in ("make check", "develop`", "main`"):
             self.assertNotIn(project_only, template)
         self.assertIn("<exact model id>", template)
-        sleash = (ROOT / "examples/sleash.project-workflow.md").read_text()
-        self.assertIn("default base: `main`", sleash)
-        self.assertIn("`make check`", sleash)
-        self.assertIn("Runtime smoke not applicable", sleash)
-        self.assertIn("- Codex leg: ask.", sleash)
-        self.assertIn("- Claude leg: ask.", sleash)
+        example = (ROOT / "examples/project-workflow.md").read_text()
+        self.assertIn("default base: `main`", example)
+        self.assertIn("`make check`", example)
+        self.assertIn("Runtime smoke not applicable", example)
+        self.assertIn("- Codex leg: ask.", example)
+        self.assertIn("- Claude leg: ask.", example)
         placeholders = set(re.findall(r"`<[^`>]+>`", template))
         self.assertGreaterEqual(len(placeholders), 20)
-        self.assertEqual(sorted(placeholder for placeholder in placeholders if placeholder in sleash), [])
+        self.assertEqual(sorted(placeholder for placeholder in placeholders if placeholder in example), [])
 
     def test_real_agent_templates_install_with_absolute_package_links(self):
         with tempfile.TemporaryDirectory(prefix="workflow install ") as directory:

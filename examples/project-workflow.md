@@ -1,29 +1,30 @@
-# Sleash workflow profile (example)
+# Project workflow profile (example)
 
-Install the shared Sentifold skills globally; gamejam is not required. Copy this
-profile to `.agents/project-workflow.md` in the sleash checkout (create the
-`.agents/` directory; sleash has none yet) only after checking every line
-against that checkout's `AGENTS.md` and Makefile. The installed `review-agent`
-skill's `references/project-contract.md` says how the shared skills read it.
-Paths are relative to the sleash checkout. Nothing here imports gamejam's
-commands, base branch, testers or report paths.
+A filled profile for a project whose base is `main` and whose checks are
+`make check`. Install the shared skills globally, then copy this profile to
+`.agents/project-workflow.md` in the project checkout (create the `.agents/`
+directory if missing) only after checking every line against that checkout's
+`AGENTS.md` and Makefile. The installed `review-agent` skill's
+`references/project-contract.md` says how the shared skills read it. Paths
+are relative to the project checkout.
 
 Read this alongside `AGENTS.md` and the Makefile.
 
 ## Scope, branches and PRs
 
-- Repo: `sentifold/sleash`; default base: `main`. An explicit task base or a
+- Repo: `example-org/example-app`; default base: `main`. An explicit task base or a
   stacked predecessor takes precedence.
 - Branch naming: the caller runtime's own convention unless the task names
   one.
 - PR creation: `gh pr create` with `--base` explicit; publish the head branch
-  first. Sleash provides no PR helper, so no helper update-path quirk applies.
+  first. The project provides no PR helper, so no helper update-path quirk
+  applies.
 - Titles: follow the checkout's PR history. Change Map areas: the top-level
   directories touched by the change.
 - Draft policy: keep PRs draft until `make check` passes on the final commit;
   merging needs the user's authorization.
 - Compatibility policy: determine compatibility and migration requirements
-  from sleash's own contracts, not from gamejam's early-stage policy.
+  from the project's own contracts.
 
 ## Stacked PRs
 
@@ -33,8 +34,8 @@ Read this alongside `AGENTS.md` and the Makefile.
   a lease-guarded force-push.
 - Required status on every head before a stack merge: the checks `AGENTS.md`
   requires, `make check` included.
-- Host stack adoption and merge helper behavior: no additional rules; sleash
-  has no merge helper.
+- Host stack adoption and merge helper behavior: no additional rules; the
+  project has no merge helper.
 
 ## Worktrees
 
@@ -47,14 +48,14 @@ Read this alongside `AGENTS.md` and the Makefile.
 ## Verification by changed surface
 
 Run `make check` on the final change and the focused tests documented for the
-affected component. Some branches or environments document
-`make verify-local` and a GitHub Codex bot: require them only when this
+affected component. Some branches or environments document extra targets
+or a review bot: require them only when this
 checkout's `AGENTS.md` defines them, record actual output and check URLs, and
 never invent a Make target or treat a pending bot review as an approved one.
 
 | Surface | Build / evidence |
 | --- | --- |
-| Application code | `make check` plus the component's documented tests; runtime verification with the local tooling the touched component documents. No product tester skill exists for sleash. |
+| Application code | `make check` plus the component's documented tests; runtime verification with the local tooling the touched component documents. No product tester skill exists for the project. |
 | Docs / tooling only | `make check` where it covers the files, otherwise the focused check for that tool. Runtime smoke not applicable: no product behavior changes. |
 
 Clean-state rules: none beyond the tests' own fixtures. Never clear or
@@ -90,7 +91,7 @@ namespace away a shared authentication session.
 - Lens overrides: none.
 - Measured escape statistics: none.
 - Reports and evidence: a caller-selected temporary or ignored directory in
-  the sleash checkout. Do not write results into the installed skills release
+  the project checkout. Do not write results into the installed skills release
   or publish them without authorization.
 
 ## Provider policy
@@ -99,6 +100,6 @@ namespace away a shared authentication session.
 - Claude leg: ask.
 - CLI selection: default.
 
-With `ask` on a leg, every chained gate stops at the model question. A sleash
+With `ask` on a leg, every chained gate stops at the model question. A
 maintainer who wants unattended orchestrate runs replaces `ask` with the exact
 model id and effort for that leg.

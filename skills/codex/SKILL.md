@@ -5,9 +5,9 @@ description: >-
   cross-provider review, or implementation handoff. Requires an explicit model,
   defaults to read-only, and records a bounded run with a verified result receipt.
   Do not invoke merely because another model might be helpful.
-license: Internal
+license: MIT
 metadata:
-  author: Theta Games
+  author: Sentifold Inc
   version: "2.0.0"
   repository: https://github.com/sentifold/skills
 ---

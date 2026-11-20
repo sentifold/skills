@@ -157,7 +157,7 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   clone too, not only in a linked worktree (below). Other dot-directories
   (`.github/`, `.claude/`) and the same names deeper down (`docs/.agents/`) stay
   writable. A handoff that edits a repo's own skills learns it only from the final
-  message: in sentifold/sleash#1069 every target was under `.agents/skills/`, and
+  message: in one run every target was under `.agents/skills/`, and
   Codex tested its patch on temporary copies and left the repository unchanged.
   Pattern that works: for files under `.agents/` or `.codex/`, have the spec ask for
   a unified diff in the final message, between markers, and `git apply` it from the

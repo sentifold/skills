@@ -122,9 +122,8 @@ message, a record or a log. HAPI's traps:
   every message**, which kills its subagents each time. A lane in such a
   project disables that server in its worktree before it launches anything;
   the project profile's "Worktrees" section names the server and the
-  setting (in gamejam,
-  `.claude/settings.local.json` holding
-  `{"disabledMcpjsonServers":["thgames"]}`, gitignored and so missing from
+  setting (for example `.claude/settings.local.json` holding
+  `{"disabledMcpjsonServers":["<server>"]}`, gitignored and so missing from
   every new worktree).
 - **The worktree is cut from the checkout's head, on HAPI's branch.**
   `sessionType: worktree` makes a folder `<repo>-worktrees/<MMDD-xxxx>` on a
@@ -150,9 +149,9 @@ turns, through a compaction).
 
 `SKILL_DIR` is the real installed directory containing this file; `SKILLS_ROOT`
 is its parent. Resolve symlinks. The sibling shared packages this workflow
-chains — `review-agent`, `github-create-pr`, `codex`, `claude`,
-`claude-stock-code-review` — live under `SKILLS_ROOT`, independently of the
-repository being changed. Do not look for them in the target repository.
+chains — `review-agent`, `github-create-pr`, `codex`, `claude` — live under
+`SKILLS_ROOT`, independently of the repository being changed. Do not look
+for them in the target repository.
 
 `PROJECT_ROOT` is the target checkout: supplied by the caller, else resolved
 with `git rev-parse --show-toplevel` from the user's working directory. Every
@@ -279,9 +278,9 @@ gates spend:
   reviewers whose candidates the lane verifies itself, with simplification
   folded into the quality reviewer, and one reviewer over the fix delta; the
   Final Review's orchestrator inspects the selected lenses itself.
-- **Heavy**: the native leg is `/claude-stock-code-review` (ten angles, a
-  verifier per candidate, a sweep) plus `/simplify` sized to the diff; the
-  Final Review spawns one lens child per selected lens.
+- **Heavy**: the native leg is Claude Code's `/code-review` at `max` (ten
+  angles, a verifier per candidate, a sweep) plus `/simplify` sized to the
+  diff; the Final Review spawns one lens child per selected lens.
 
 Record the weight in the scope record, in every lane brief and at closure;
 only the person changes it.
@@ -292,7 +291,7 @@ only the person changes it.
 |------|-----|-----|
 | Cross-provider design validation / review | the driver / the lane | `codex` skill, read-only/review |
 | Implementation | the lane | a `codex` write handoff into its own worktree, from a spec the lane writes, for anything nontrivial, fixes included; by hand only a trivial edit (a word, a caption, a conflict resolution, a one-line revert) |
-| First-order review | the lane | light: three grouped reviewer subagents; heavy: `/claude-stock-code-review` (copy of the stock `/code-review`) |
+| First-order review | the lane | light: three grouped reviewer subagents; heavy: `/code-review max --max-findings all` over the lane's range |
 | Simplification | the lane | light: folded into the quality reviewer; heavy: `/simplify` (model-invocable) |
 | Final layered review | the driver | `review-orchestrator` subagent, given the weight |
 
@@ -592,30 +591,36 @@ legs — the third folds into the first in light and may in heavy:
      `general-purpose`, told to review and never edit) over its exact
      range (`<lane-base>...HEAD`, the base SHA recorded at lane fork), each
      given the lane's intended behavior and the paths other lanes own. Each
-     reads only the Phase 1 angles of
-     [`claude-stock-code-review`](../claude-stock-code-review/SKILL.md),
-     runs none of its other phases, performs its angles itself in its own
-     context — never through the Agent tool — and owns one group: **inside
-     the diff** — Angles A, B, D and E, plus a doc comment deleted or
-     rewritten without its content carried over; **outside it** — Angle C
-     and Conventions, plus the local review docs the project profile names;
-     **quality** — Reuse, Simplification, Efficiency and Altitude, plus
-     unreachable branches and fallbacks for states that cannot occur. Each
+     performs its angles itself in its own context — never through the
+     Agent tool — and owns one group: **inside the diff** — every changed
+     line for wrong logic, conditions, bounds and error handling, behavior
+     the diff removes that something still relies on, the language's own
+     pitfalls, and wrappers or proxies that drop or alter what they pass
+     on, plus a doc comment deleted or rewritten without its content
+     carried over; **outside it** — the callers, implementations and other
+     files the change reaches, and the repository's written conventions,
+     plus the local review docs the project profile names; **quality** —
+     logic an existing helper already covers, code that can be simpler,
+     wasted work and code at the wrong layer, plus unreachable branches and
+     fallbacks for states that cannot occur. Each
      returns, as text and never through ReportFindings, every candidate it
      can tie to a quoted line and a concrete failure or cost, with no count
      limit, ranked most severe first and
      deduped across its angles, each with `file`, `line`, `summary`,
      `failure_scenario` and `category`. The lane dedupes them and verifies each
-     against the code before fixing, with that skill's Phase 2 verdicts
-     (CONFIRMED / PLAUSIBLE / REFUTED); no verifier agents and no sweep.
-   - **Heavy**: the lane invokes **`/claude-stock-code-review`** — the
-     shared model-invocable copy of Claude Code's stock `/code-review` (it
-     runs as a forked background subagent). **Pass the lane's exact range as
-     the argument** (`<lane-base>...HEAD`): with no argument its diff
+     against the code before fixing, with one verdict each — CONFIRMED when
+     the inputs that trigger it can be named, PLAUSIBLE when the mechanism
+     holds but the trigger is uncertain, REFUTED when the code does not do
+     that or guards it; no verifier agents and no sweep.
+   - **Heavy**: the lane invokes Claude Code's own **`/code-review`** as
+     `/code-review max --max-findings all <lane-base>...HEAD` (it runs as a
+     forked background subagent). **Pass all three every time**: with no
+     level it reuses the one the person last typed, without
+     `--max-findings all` it caps the report, and with no range its diff
      defaults to `@{upstream}...HEAD`, which reviews nothing once the lane's
-     draft-PR branch is pushed. If the copy is unavailable in the session,
-     spawn a fresh review subagent (Agent tool, `general-purpose`) over the
-     exact diff with a first-order mandate instead. Give either a generous
+     draft-PR branch is pushed. If `/code-review` is unavailable in the
+     session, spawn a fresh review subagent (Agent tool, `general-purpose`)
+     over the exact diff with a first-order mandate instead. Give either a generous
      deadline, ~60 minutes of agent time; past it send one wrap-up message
      if the runtime can reach the run, otherwise treat it as the silent
      death below — never a silent wait.
@@ -658,7 +663,7 @@ minutes" took 34 to 76 calls and 10 to 18 minutes, the two longest only
 after the lane's wrap-up while a restack waited, one of them calling itself
 within budget at 49 calls; one told to stop at its 40th call returned at 40).
 
-**In heavy, the forked native review can die silently.** `/claude-stock-code-review` forks
+**In heavy, the forked native review can die silently.** `/code-review` forks
 finder subagents and a verifier; on a session model rate limit (`You've reached
 your ... limit`, HTTP 429) the finders' raw angle reports still arrive as task
 notifications but the consolidated, verified report never does (observed: nine
@@ -690,8 +695,8 @@ the Final Review found it false). In light that is one
 fix-delta check once the fixes change behavior: commit the fixes, then a fresh
 reviewer subagent, scoped and budgeted as above, over
 `<reviewed-head>..HEAD` and the enclosing functions, given the verified list
-and the remit of `claude-stock-code-review`'s Phase 3 — what the fixes broke
-or missed, not re-confirmation — reporting every candidate on the same terms,
+and its remit — what the fixes broke or missed, not re-confirmation —
+reporting every candidate on the same terms,
 plus one cross-provider pass over the same delta. The delta is what the lane
 itself wrote since the reviewed head: its own commits
 (`git log -p --first-parent --no-merges <reviewed-head>..HEAD`) and, for a
@@ -1312,9 +1317,8 @@ names live under `PROJECT_ROOT`.
 - implementation: the lane session, through a `codex` write
   handoff, in its own worktree
 - per-step native review / simplification: in the lane — three grouped
-  reviewer subagents in light, **`/claude-stock-code-review`**
-  (copy of the stock `/code-review`) + **`/simplify`** sized to the diff in
-  heavy
+  reviewer subagents in light, **`/code-review max --max-findings all`** +
+  **`/simplify`** sized to the diff in heavy
 - final review & lint (whole scope, once): **`review-agent` skill** via its
   **`review-orchestrator`** subagent, given the weight
 - build / run / clean-state test: the executor the project profile names per

@@ -1,9 +1,8 @@
 # Sentifold skills
 
-Shared engineering workflows for Sentifold projects, usable from Claude Code and
-Codex without a gamejam checkout. Project commands, product knowledge and release
-policy stay in each consuming repo's `AGENTS.md` and optional
-`.agents/project-workflow.md`.
+Shared engineering workflows for Claude Code and Codex. Project commands,
+product knowledge and release policy stay in each consuming repo's `AGENTS.md`
+and optional `.agents/project-workflow.md`.
 
 | Package | Runtime | Entry |
 | --- | --- | --- |
@@ -13,17 +12,16 @@ policy stay in each consuming repo's `AGENTS.md` and optional
 | `github-create-pr` | Claude Code, Codex | Create/update a PR when requested |
 | `codex` | Claude Code | Explicit second-provider task or authorized workflow leg |
 | `claude` | Codex | Explicit second-provider task or authorized workflow leg |
-| `claude-stock-code-review` | Claude Code | Internal first-review dependency; separate from the stock command |
 
 `catalog.json` is the installable set. `agents/` supplies the review orchestrator
-and lens agents for both runtimes. Domain skills stay in gamejam. `history-search`, rebase,
+and lens agents for both runtimes. `history-search`, rebase,
 Linear and Mermaid are outside this release; `pr-arch-review` is retired.
 
 ## Install
 
-Requirements: Python **3.11+**, Git, Bash, access to this private repo, and the
-CLI for each runtime you use. Provider helpers support macOS/Linux/WSL through
-POSIX process groups and native Windows (Git Bash) through Job Objects.
+Requirements: Python **3.11+**, Git, Bash and the CLI for each runtime you use.
+Provider helpers support macOS/Linux/WSL through POSIX process groups and
+native Windows (Git Bash) through Job Objects.
 POSIX hosts need `ps -axo pid=,pgid=,stat=` and `ps -o stat= -p <pid>` support.
 On Windows, `python3` must resolve to a real interpreter, not the Microsoft
 Store alias. Authentication and model availability remain personal runtime settings.
@@ -95,12 +93,9 @@ target recorded. `uninstall` proceeds when the disk already holds an entry's
 restore target.
 
 If dotfiles or another sync tool owns a package, remove **that package only**
-from its link plan before adoption. In the earlier Sentifold dotfiles setup,
-`link-agent-skills` links `github-create-pr` from dotfiles and `codex`/`claude`
-from `gamejam-agent-skills`; those three ownership rules must be retired for a
-machine adopting this release. Keep all unrelated personal skills, including the
-four deferred packages. A later dotfiles sync followed by `doctor` must leave
-these links intact. This repo does not silently edit another dotfiles repository.
+from its link plan before adoption. Keep all unrelated personal skills. A later
+dotfiles sync followed by `doctor` must leave these links intact. This repo
+does not silently edit another dotfiles repository.
 
 Do not keep project-local copies of the six shared packages or review agents in
 a migrated project: they shadow the installed version. Migrate a consumer only
@@ -120,9 +115,8 @@ shared workflow discovers the project's base, checks and optional
 runtime, or permission to merge/deploy.
 
 [Project contract](skills/review-agent/references/project-contract.md) explains
-local checks and review overlays. [Sleash example](examples/sleash.project-workflow.md)
-shows a `main`/`make check` consumer. Gamejam retains native/browser/iOS testing,
-profiling consent, platform policy and measured review priorities in its profile.
+local checks and review overlays. [The example](examples/project-workflow.md)
+shows a `main`/`make check` consumer.
 
 **Connect a project:** copy [templates/project-workflow.md](templates/project-workflow.md)
 to the project's `.agents/project-workflow.md`, fill every placeholder from
@@ -160,7 +154,7 @@ at shell or agent startup.
 ## Team onboarding
 
 Use the [onboarding checklist](docs/onboarding.md) for a first installation,
-Mikhail's sleash pilot, model compatibility checks and the update/rollback drill.
+model compatibility checks and the update/rollback drill.
 A successful `doctor` is installation evidence; a real project task in a new
 session is workflow evidence. Do not mark a participant onboarded from a clone
 or a menu entry alone.
@@ -179,6 +173,5 @@ Use independent task fixtures for workflow changes, then pilot the supported
 clients before rolling the version out to the team.
 
 Fix common workflow behavior here; fix product commands and policy in its project;
-fix personal machine setup in its owner's configuration. Preserve the source
-notices in [PROVENANCE.md](PROVENANCE.md) and package licenses. Do not commit
-credentials, transcripts or private machine paths.
+fix personal machine setup in its owner's configuration. Preserve package
+licenses. Do not commit credentials, transcripts or private machine paths.

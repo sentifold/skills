@@ -1,11 +1,10 @@
 # Sentifold skills onboarding
 
 Goal: `/orchestrate` in the Claude desktop app or a HAPI session works in a participant's own
-project, including its checks and an independent review, without a gamejam
-checkout.
+project, including its checks and an independent review.
 
-1. **Access and version.** The participant checks access to the private
-   `sentifold/skills`, Python 3.11+, Bash and the CLI of each runtime they use.
+1. **Access and version.** The participant checks Python 3.11+, Bash and the
+   CLI of each runtime they use.
    They use the release the team agreed on (a tag or `main`).
    Authentication stays personal.
 2. **Sources.** Run `install.py plan --runtime both` (or one runtime) and read the
@@ -15,16 +14,14 @@ checkout.
 3. **Install.** Run `apply`, then `doctor` with the same home/runtime roots.
    `doctor` checks the legacy duplicates in `~/.codex/skills` and, for Codex,
    `features.multi_agent` / `agents.max_depth` in `config.toml`; copies of the
-   shared packages inside a project are checked by that project's test (in
-   gamejam, `Scripts/tests/test_shared_skills_setup.py`). Installer state lives in
+   shared packages inside a project are checked by that project's own test.
+   Installer state lives in
    `~/.local/share/sentifold-skills-state/` (the receipt and, during `apply`, the
    journal); an interrupted `apply` is recovered by the next `plan`/`apply`.
    The installer never changes model, auth, MCP or approval settings.
 4. **New session.** Open the project and confirm that orchestrate and
    review-agent are discovered. Before implementing anything the agent must
-   name the right project, base branch and checks. For the sleash pilot:
-   sleash, main, make check; extra targets and the bot only per the current
-   contract of that branch.
+   name the right project, base branch and checks.
 5. **CLI check.** Select an available model explicitly. The helper records the
    actual CLI path/version and run ID. If the PATH binary does not support the
    selected model, check the installation; switching binaries is explicit. For
@@ -47,8 +44,8 @@ checkout.
 
 ## Connect a project
 
-The procedure for any consumer without a gamejam checkout. Every path below is
-inside the project checkout.
+The procedure for any consumer. Every path below is inside the project
+checkout.
 
 1. **Install the pinned release per the README.** From a `sentifold/skills`
    checkout at a reviewed commit: `python3 install.py plan --runtime both`, then
@@ -56,16 +53,11 @@ inside the project checkout.
    says only that the shared skills must be installed; it carries no copy, pin
    or bootstrap of its own.
 2. **Create the profile.** Copy `templates/project-workflow.md` from the release
-   to the project's `.agents/project-workflow.md` (create `.agents/` if missing;
-   sleash currently has no `.agents/`, `.claude/` or `.codex/`) and replace every
-   `<placeholder>` with facts of that checkout: the base is `develop` in gamejam
-   and cloud, `main` in sleash, captain and codex-multi-auth, `master` in
-   teamclaude; checks are `make check` in sleash per its `AGENTS.md`, and in
-   cloud `make check` plus a final `make e2e` for the user-facing changes it
-   lists. Delete an item that does not apply instead of leaving a guess; a
-   profile never imports another project's commands. A filled example:
-   `examples/sleash.project-workflow.md`; the reference with product gates is
-   `.agents/project-workflow.md` in gamejam.
+   to the project's `.agents/project-workflow.md` (create `.agents/` if missing)
+   and replace every `<placeholder>` with facts of that checkout: its base
+   branch and the checks its `AGENTS.md` names. Delete an item that does not
+   apply instead of leaving a guess; a profile never imports another project's
+   commands. A filled example: `examples/project-workflow.md`.
 3. **Codex: allow nested agents.** The heavy review-agent topology
    (caller → `review-orchestrator` → `review-lens`) needs
    `[features] multi_agent = true` and `[agents] max_depth = 2` in
@@ -90,11 +82,6 @@ inside the project checkout.
    `sentifold/skills`. A project's base, checks, executors and report paths: a
    PR to its `.agents/project-workflow.md`.
 
-For the pilot, record: participant, project, runtime and CLI version, skills
+For a first project, record: participant, project, runtime and CLI version, skills
 commit, check commands, a link to the real task/PR, the second-provider result,
 and update/rollback. An empty item means an unverified part, not a PASS.
-
-First the sleash pilot and one more participant in gamejam, then the remaining
-active projects. These PRs provide the set and the procedure; they do not prove
-that the whole team has installed it. Do not message participants without the
-user's explicit instruction.

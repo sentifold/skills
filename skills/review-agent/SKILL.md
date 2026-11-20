@@ -9,8 +9,7 @@ description: "Second-order layered review of a change scope — assumes a first-
 
 Layered, cross-validated review of a change scope, built on native subagents —
 no external runner. This is the **second-order** pass: it assumes the
-first-order generalists — `/code-review` (orchestrate runs its angles from the
-`/claude-stock-code-review` copy; `codex review` also counts) and `/simplify` —
+first-order generalists — `/code-review` (`codex review` also counts) and `/simplify` —
 already ran on this scope, the way the orchestrate pipeline's Code Review gate
 runs them per step. It does not re-hunt what those tools own (local correctness
 bugs, hygiene, readability, generic simplification); its value is the

@@ -94,7 +94,7 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((self.home / ".claude").exists())
         self.perform(selected={"claude"})
         self.assertTrue((self.home / ".claude/skills/codex").is_symlink())
-        self.assertTrue((self.home / ".claude/skills/claude-stock-code-review").is_symlink())
+        self.assertTrue((self.home / ".claude/skills/orchestrate").is_symlink())
         self.assertFalse((self.home / ".claude/skills/claude").exists())
         self.assertEqual(self.plan().changes, [])
 
@@ -390,7 +390,7 @@ class InstallerTests(unittest.TestCase):
     def test_policy_metadata_and_license_are_required_resources(self):
         for resource in ("skills/review-agent/agents/openai.yaml",
                          "skills/github-create-pr/agents/openai.yaml", "skills/claude/agents/openai.yaml",
-                         "skills/claude-stock-code-review/agents/openai.yaml", "skills/codex/LICENSE.txt"):
+                         "skills/codex/LICENSE.txt"):
             with self.subTest(resource=resource):
                 path = self.root / resource
                 contents = path.read_bytes()
@@ -416,7 +416,7 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(install.main(["plan", "--home", str(self.home), "--adopt", "github-create-pr", "--adopt", "review-agent"]), 0)
         text = output.getvalue()
         self.assertIn(f"Source: {self.root} (Git {revision})", text)
-        self.assertIn("Packages: claude: claude-stock-code-review, codex, delegate, github-create-pr, orchestrate, "
+        self.assertIn("Packages: claude: codex, delegate, github-create-pr, orchestrate, "
                       "review-agent; codex: claude, github-create-pr, review-agent", text)
         self.assertIn(f"install/update: {self.home / '.claude/skills/orchestrate'} -> {self.root / 'skills/orchestrate'}\n", text)
         self.assertIn(f"adopt symlink: {self.home / '.agents/skills/github-create-pr'} -> {self.root / 'skills/github-create-pr'} (was -> old github-create-pr)\n", text)
@@ -437,8 +437,12 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((self.home / ".agents/skills/github-create-pr").exists())
         self.assertTrue((self.home / ".agents/skills/claude").is_symlink())
         self.assertTrue((self.home / ".codex/agents/review-orchestrator.toml").is_file())
-        plan = self.perform(packages={"claude-stock-code-review"}, selected={"claude"})
-        self.assertEqual(plan.packages, {"claude": ["claude-stock-code-review", "codex", "review-agent"]})
+        for package in self.catalog["packages"]:
+            if package["name"] == "github-create-pr":
+                package["requires"] = {"claude": ["review-agent"]}
+        (self.root / "catalog.json").write_text(json.dumps(self.catalog))
+        plan = self.perform(packages={"github-create-pr"}, selected={"claude"})
+        self.assertEqual(plan.packages, {"claude": ["codex", "github-create-pr", "review-agent"]})
         self.assertTrue((self.home / ".agents/skills/review-agent").is_symlink())
         self.assertEqual(self.plan(packages={"review-agent"}, selected={"codex"}).changes, [])
         with self.assertRaisesRegex(install.InstallError, "Unknown --package names: typo"):
@@ -662,7 +666,7 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         result = subprocess.run([sys.executable, "-c", driver], capture_output=True, text=True)
         self.assertEqual(result.returncode, 137, result.stderr)
         journal = json.loads(self.locations.journal.read_text())
-        self.assertEqual(len(journal["changes"]), 13)
+        self.assertEqual(len(journal["changes"]), 12)
         self.assertNotIn(str(self.locations.receipt), {change["path"] for change in journal["changes"]})
         return journal
 
@@ -677,7 +681,7 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         self.assertEqual(journal["entries"][str(adopted)]["restore"], "before installation")
         plan = self.plan()
         self.assertEqual(plan.recovered_pid, journal["pid"])
-        self.assertIn("4 of 13 journaled changes had been written and are owned again", plan.notes[0])
+        self.assertIn("4 of 12 journaled changes had been written and are owned again", plan.notes[0])
         self.assertNotIn(adopted, {change.path for change in plan.changes})
         self.assertNotIn(self.locations.claude / "agents/review-lens.md", {change.path for change in plan.changes})
         self.assertIn(self.locations.claude / "agents/review-orchestrator.md", {change.path for change in plan.changes})
@@ -686,7 +690,7 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         self.assertEqual(self.plan().changes, [])
         receipt = json.loads(self.locations.receipt.read_text())
         self.assertEqual(receipt["entries"][str(adopted)]["restore"], "before installation")
-        self.assertEqual(len(receipt["entries"]), 13)
+        self.assertEqual(len(receipt["entries"]), 12)
         self.perform(uninstall=True)
         self.assertEqual(os.readlink(adopted), "before installation")
         self.assertFalse((self.locations.claude / "agents/review-lens.md").exists())
@@ -707,13 +711,13 @@ install.apply(install.prepare(Path({str(self.root)!r}), locations, {{"codex", "c
         self.crash_apply(writes_before_crash=0)
         self.assertFalse((self.home / ".agents/skills/github-create-pr").exists())
         plan = self.plan()
-        self.assertIn("0 of 13 journaled changes", plan.notes[0])
-        self.assertEqual(len(plan.changes), 14)
+        self.assertIn("0 of 12 journaled changes", plan.notes[0])
+        self.assertEqual(len(plan.changes), 13)
         install.apply(plan)
         self.assertFalse(self.locations.lock.exists())
         self.assertEqual(self.plan().changes, [])
         shutil.rmtree(self.home)
-        self.crash_apply(writes_before_crash=14, after_last_write=True)
+        self.crash_apply(writes_before_crash=13, after_last_write=True)
         self.assertTrue(self.locations.receipt.exists())
         plan = self.plan()
         self.assertEqual(plan.changes, [])
