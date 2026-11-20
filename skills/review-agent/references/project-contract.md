@@ -11,6 +11,11 @@ Relative links in a shared skill resolve against that skill's real installed
 location. A project may refer to installed sibling skills by skill name; it
 must not assume those packages were copied into its own `.agents/skills`.
 
+Use the runtime's explicit bindings in the session instructions for a shared
+skill's tool references only when they preserve the required behavior, gates,
+stop conditions and consent boundaries and rely on capabilities actually
+exposed.
+
 Useful profile sections:
 
 - Architecture maps and the conditions requiring their updates.

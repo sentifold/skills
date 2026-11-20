@@ -302,7 +302,8 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   bypassing the routing wrapper, with the API-key variables unset so the subscription
   is used: `env -u OPENAI_API_KEY -u CODEX_API_KEY <binary> exec --ephemeral
   --skip-git-repo-check --sandbox workspace-write -C <dir> -m <model>
-  -c mcp_servers.node_repl.enabled=false "<prompt>" </dev/null`. That bills the primary
+  -c mcp_servers.node_repl.enabled=false "<prompt>" </dev/null` (leave out its `-c`
+  where the configuration defines no `node_repl`; see below). That bills the primary
   account rather than the pool. Ask for the PNG to be copied out of
   `$CODEX_HOME/generated_images/` into the workspace and its path printed. One image per
   run, several runs in parallel; a prompt that fails three times with
@@ -313,8 +314,16 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   navigation, is refused every time, and the model then reports "web access was
   denied" instead of falling back to the provider-side `web_search` (observed
   2026-09-15, a whole review delivered with unverified prices). The helper now
-  passes `-c mcp_servers.node_repl.enabled=false`; `--browser-mcp` re-enables it.
+  passes `-c mcp_servers.node_repl.enabled=false` unless a lookup lists the
+  configured servers without that one (next bullet); `--browser-mcp` leaves
+  the inherited setting alone.
   In the prompt, say "use the built-in web_search tool for web facts".
+- **Disabling an undefined MCP server breaks startup.** On a clean configuration,
+  the override alone creates an entry with no transport, so `codex exec` exits
+  before any request: "invalid transport in `mcp_servers.node_repl`" (observed
+  2026-11-19, codex-cli 0.162.1). The helper first asks `codex mcp list --json`
+  through the selected executable in the run's target directory, and passes the
+  override when the list holds `node_repl` or the lookup fails.
 - **MCP auth noise in stderr is benign.** Startup may log
   `ERROR rmcp::transport::worker: ... AuthRequired ... invalid_token` for MCP servers
   configured in `~/.codex` (e.g. Linear) whose tokens expired. The run proceeds

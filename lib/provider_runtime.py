@@ -465,6 +465,7 @@ class Run:
         self.run_id = uuid.uuid4().hex
         self.root = self.receipt = self.result = None
         self.child = None
+        self.node_repl_absent = False
         # Implementation and fix rounds outlast the half hour and 32 turns a review fits in.
         write = (args.sandbox if provider == "codex" else args.mode) != "read-only"
         if args.timeout is None:
@@ -527,11 +528,11 @@ class Run:
             self.shield = False
         self.child = None
 
-    def execute(self, argv, label, *, stdin=None, cwd=None, limit=None):
+    def execute(self, argv, label, *, stdin=None, cwd=None, limit=None, env=None):
         out, err = self.root / f"{label}.stdout", self.root / f"{label}.stderr"
         with out.open("wb") as stdout, err.open("wb") as stderr:
             self.ownership.spawn(self, argv, stdin=stdin if stdin is not None else subprocess.DEVNULL,
-                                 stdout=stdout, stderr=stderr, cwd=cwd, env=self.env)
+                                 stdout=stdout, stderr=stderr, cwd=cwd, env=env if env is not None else self.env)
             self.save(child_pid=self.child.pid, phase=label,
                       stdout=str(out), stderr=str(err))
             process = self.child
@@ -612,6 +613,58 @@ class Run:
             "maxturns", limit=self.args.preflight_timeout)
         return "unknown option" not in err.read_text(encoding="utf-8", errors="replace").lower()
 
+    def lookup_mcp(self, cli):
+        label = "mcp"
+        listing = self.root / f"{label}.stdout"
+        try:
+            try:
+                env = None
+                home = self.env.get("CODEX_HOME")
+                if home and not os.path.isabs(home):
+                    # The lookup stands in the target directory; a relative home must still be the run's.
+                    env = dict(self.env, CODEX_HOME=os.path.abspath(home))
+                rc, _, _ = self.execute(
+                    [cli, "mcp", "list", "--json"], label, cwd=self.args.cd or None,
+                    limit=self.args.preflight_timeout, env=env)
+            except (RunError, OSError) as exc:
+                # A failed lookup keeps today's command line; a cleanup failure, a signal or the deadline ends the run.
+                if isinstance(exc, RunError) and exc.status not in ("TIMEOUT", "FAILED"):
+                    raise
+                self.cleanup()
+                if time.monotonic() >= self.deadline:
+                    raise
+                deferred = self.data.get("deferred_signals")
+                if deferred:
+                    raise Cancelled(deferred[0]) from exc
+                if isinstance(exc, RunError) and exc.status == "TIMEOUT":
+                    outcome = "failed: timeout"
+                else:
+                    outcome = "failed: not started"
+            else:
+                if rc:
+                    outcome = f"failed: exit {rc}"
+                else:
+                    try:
+                        servers = json.loads(listing.read_text(encoding="utf-8"))
+                        if not isinstance(servers, list):
+                            raise ValueError
+                        names = {server["name"] for server in servers}
+                    except (OSError, ValueError, KeyError, TypeError, RecursionError):
+                        outcome = "failed: unreadable output"
+                    else:
+                        self.node_repl_absent = "node_repl" not in names
+                        outcome = "node_repl not listed" if self.node_repl_absent else "node_repl listed"
+        finally:
+            # Stop anything still writing, then empty rather than remove: the receipt names the path.
+            try:
+                self.cleanup()
+            finally:
+                try:
+                    listing.write_bytes(b"")
+                except OSError:
+                    pass
+        self.save(mcp_lookup=outcome)
+
     def command(self, cli):
         a = self.args
         if self.provider == "codex":
@@ -630,7 +683,8 @@ class Run:
             argv += ["-c", f"sandbox_workspace_write.network_access={str(a.network).lower()}"]
             if not a.search:
                 argv += ["-c", "web_search='disabled'" if os.name == "nt" else 'web_search="disabled"']
-            if not a.browser_mcp:
+            # Skipped only when the lookup listed the servers without node_repl: alone, it is an invalid entry.
+            if not a.browser_mcp and not self.node_repl_absent:
                 argv += ["-c", "mcp_servers.node_repl.enabled=false"]
             # Overrides any inherited developer_instructions for this run only.
             argv += ["-c", f"developer_instructions='{AGENT_REQUEST}'"]
@@ -775,6 +829,8 @@ class Run:
 
     def perform(self):
         cli = self.resolve_cli()
+        if self.provider == "codex" and not self.args.browser_mcp:
+            self.lookup_mcp(cli)
         if self.provider == "claude" and self.args.auth == "subscription":
             # Compatibility spelling: loggedIn is not a billing/provider attestation.
             status = json.loads(self.probe(cli, ["auth", "status", "--json"], "auth"))

@@ -89,7 +89,7 @@ when the provider printed nonempty `ERROR:` lines in the last 64 KiB of its stde
 (deduplicated, the last three, each cut to 300 characters). Its `diagnostic` then
 opens with it, so a caller can tell a transient refusal — `Selected model is at
 capacity` — from an authentication or capability failure without opening
-`provider.stderr`.
+`provider.stderr`. `mcp_lookup` records what the MCP server lookup found.
 
 `--out` must name an unused file. The helper reserves it exclusively, publishes
 only a nonempty final result after successful CLI exit, and removes its empty
@@ -112,7 +112,8 @@ The default overall deadline is 1800 seconds for a `read-only` run and 7200
 seconds for a write run (`workspace-write`, `danger-full-access`), because an
 implementation or fix round outlasts the half hour a review fits in; a lane
 handoff inherits it. `--timeout <seconds>` changes it.
-Version/help probes are limited to 10 seconds each (`--preflight-timeout`).
+Version/help probes and the MCP server lookup are limited to 10 seconds each
+(`--preflight-timeout`).
 On POSIX, TERM/INT and deadline expiry terminate the owned child process group,
 wait briefly, then kill remaining group members. A signal that arrives during that
 cleanup is recorded in the receipt (`deferred_signals`) and does not replace
@@ -164,11 +165,18 @@ Search is on by default. `--no-search` explicitly sets `web_search="disabled"`,
 overriding inherited provider-search configuration. Local workspace-write network
 access is explicitly false unless `--network` enables it. These controls do not
 block the provider connection, other sandbox profiles or external MCP tools.
-The default disables only the `node_repl` MCP entry; `--browser-mcp` leaves its
-inherited setting in place. Other MCP servers, writable roots, hooks and config
-may remain inherited: `read-only` is the selected CLI sandbox mode, not a claim
-that every external integration is incapable of mutation. Match those settings
-to the authorized task before delegating work.
+The default disables only the `node_repl` MCP entry, unless a lookup of the
+configured servers (`codex mcp list --json`, in the target directory) succeeds
+without it; `--browser-mcp` skips the lookup and leaves its inherited setting in
+place. The lookup's listing is the configuration itself; it is emptied after the
+lookup, and stays in the private run directory only if the supervisor is killed
+during the lookup (that directory is then never swept, its receipt staying
+`STARTING`), if a signal lands between stopping the lookup and emptying the
+listing, or if emptying it fails, which nothing records. Other MCP servers,
+writable roots, hooks and config may remain inherited: `read-only` is the
+selected CLI sandbox mode, not a claim that every external integration is
+incapable of mutation. Match those settings to the authorized task before
+delegating work.
 
 The helper runs Codex with its own `--ephemeral`, which avoids saved
 session rollouts; the helper itself takes no such flag (a run passed one
