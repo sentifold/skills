@@ -465,6 +465,7 @@ class Run:
         self.run_id = uuid.uuid4().hex
         self.root = self.receipt = self.result = None
         self.child = None
+        self.node_repl_listed = None
         # Implementation and fix rounds outlast the half hour and 32 turns a review fits in.
         write = (args.sandbox if provider == "codex" else args.mode) != "read-only"
         if args.timeout is None:
@@ -612,6 +613,32 @@ class Run:
             "maxturns", limit=self.args.preflight_timeout)
         return "unknown option" not in err.read_text(encoding="utf-8", errors="replace").lower()
 
+    def lookup_mcp(self, cli):
+        out = self.root / "mcp.stdout"
+        try:
+            rc, out, _ = self.execute(
+                [cli, "mcp", "list", "--json"], "mcp",
+                cwd=str(Path(self.args.cd).absolute()) if self.args.cd else None,
+                limit=self.args.preflight_timeout)
+            if rc:
+                outcome = f"failed: exit {rc}"
+            else:
+                servers = json.loads(out.read_text(encoding="utf-8"))
+                if not isinstance(servers, list):
+                    raise ValueError
+                self.node_repl_listed = any(
+                    isinstance(server, dict) and server.get("name") == "node_repl" for server in servers)
+                outcome = "node_repl listed" if self.node_repl_listed else "node_repl not listed"
+        except RunError as exc:
+            if exc.status != "TIMEOUT" or time.monotonic() >= self.deadline:
+                raise
+            outcome = "failed: timeout"
+        except (OSError, ValueError):
+            outcome = "failed: unreadable output"
+        finally:
+            out.unlink(missing_ok=True)
+        self.save(mcp_lookup=outcome)
+
     def command(self, cli):
         a = self.args
         if self.provider == "codex":
@@ -630,7 +657,8 @@ class Run:
             argv += ["-c", f"sandbox_workspace_write.network_access={str(a.network).lower()}"]
             if not a.search:
                 argv += ["-c", "web_search='disabled'" if os.name == "nt" else 'web_search="disabled"']
-            if not a.browser_mcp:
+            # Only confirmed absence skips the override, which would create an invalid server.
+            if not a.browser_mcp and self.node_repl_listed is not False:
                 argv += ["-c", "mcp_servers.node_repl.enabled=false"]
             # Overrides any inherited developer_instructions for this run only.
             argv += ["-c", f"developer_instructions='{AGENT_REQUEST}'"]
@@ -775,6 +803,8 @@ class Run:
 
     def perform(self):
         cli = self.resolve_cli()
+        if self.provider == "codex" and not self.args.browser_mcp:
+            self.lookup_mcp(cli)
         if self.provider == "claude" and self.args.auth == "subscription":
             # Compatibility spelling: loggedIn is not a billing/provider attestation.
             status = json.loads(self.probe(cli, ["auth", "status", "--json"], "auth"))

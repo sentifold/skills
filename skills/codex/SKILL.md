@@ -164,11 +164,11 @@ Search is on by default. `--no-search` explicitly sets `web_search="disabled"`,
 overriding inherited provider-search configuration. Local workspace-write network
 access is explicitly false unless `--network` enables it. These controls do not
 block the provider connection, other sandbox profiles or external MCP tools.
-The default disables only the `node_repl` MCP entry; `--browser-mcp` leaves its
-inherited setting in place. Other MCP servers, writable roots, hooks and config
-may remain inherited: `read-only` is the selected CLI sandbox mode, not a claim
-that every external integration is incapable of mutation. Match those settings
-to the authorized task before delegating work.
+The default disables only the `node_repl` MCP entry when the configuration defines
+one; `--browser-mcp` leaves its inherited setting in place. Other MCP servers,
+writable roots, hooks and config may remain inherited: `read-only` is the selected
+CLI sandbox mode, not a claim that every external integration is incapable of
+mutation. Match those settings to the authorized task before delegating work.
 
 The helper runs Codex with its own `--ephemeral`, which avoids saved
 session rollouts; the helper itself takes no such flag (a run passed one
