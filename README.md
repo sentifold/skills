@@ -1,9 +1,8 @@
 # Sentifold skills
 
-Shared engineering workflows for Sentifold projects, usable from Claude Code and
-Codex without a gamejam checkout. Project commands, product knowledge and release
-policy stay in each consuming repo's `AGENTS.md` and optional
-`.agents/project-workflow.md`.
+Shared engineering workflows for Claude Code and Codex. Project commands,
+product knowledge and release policy stay in each consuming repo's `AGENTS.md`
+and optional `.agents/project-workflow.md`.
 
 | Package | Runtime | Entry |
 | --- | --- | --- |
@@ -13,17 +12,16 @@ policy stay in each consuming repo's `AGENTS.md` and optional
 | `github-create-pr` | Claude Code, Codex | Create/update a PR when requested |
 | `codex` | Claude Code | Explicit second-provider task or authorized workflow leg |
 | `claude` | Codex | Explicit second-provider task or authorized workflow leg |
-| `claude-stock-code-review` | Claude Code | Internal first-review dependency; separate from the stock command |
 
 `catalog.json` is the installable set. `agents/` supplies the review orchestrator
-and lens agents for both runtimes. Domain skills stay in gamejam. `history-search`, rebase,
+agent for both runtimes. `history-search`, rebase,
 Linear and Mermaid are outside this release; `pr-arch-review` is retired.
 
 ## Install
 
-Requirements: Python **3.11+**, Git, Bash, access to this private repo, and the
-CLI for each runtime you use. Provider helpers support macOS/Linux/WSL through
-POSIX process groups and native Windows (Git Bash) through Job Objects.
+Requirements: Python **3.11+**, Git, Bash and the CLI for each runtime you use.
+Provider helpers support macOS/Linux/WSL through POSIX process groups and
+native Windows (Git Bash) through Job Objects.
 POSIX hosts need `ps -axo pid=,pgid=,stat=` and `ps -o stat= -p <pid>` support.
 On Windows, `python3` must resolve to a real interpreter, not the Microsoft
 Store alias. Authentication and model availability remain personal runtime settings.
@@ -95,12 +93,9 @@ target recorded. `uninstall` proceeds when the disk already holds an entry's
 restore target.
 
 If dotfiles or another sync tool owns a package, remove **that package only**
-from its link plan before adoption. In the earlier Sentifold dotfiles setup,
-`link-agent-skills` links `github-create-pr` from dotfiles and `codex`/`claude`
-from `gamejam-agent-skills`; those three ownership rules must be retired for a
-machine adopting this release. Keep all unrelated personal skills, including the
-four deferred packages. A later dotfiles sync followed by `doctor` must leave
-these links intact. This repo does not silently edit another dotfiles repository.
+from its link plan before adoption. Keep all unrelated personal skills. A later
+dotfiles sync followed by `doctor` must leave these links intact. This repo
+does not silently edit another dotfiles repository.
 
 Do not keep project-local copies of the six shared packages or review agents in
 a migrated project: they shadow the installed version. Migrate a consumer only
@@ -111,8 +106,7 @@ with its project profile and an install pointer in its README in the same change
 Start a new session in the target project after installing. Read its `AGENTS.md`
 and CI instructions first. Invoke `/orchestrate` in the Claude desktop app or a
 HAPI session with a concrete task: every lane runs as a linked session of its
-own (in HAPI, a peer session in a worktree of its own), and the reviews
-run light unless you name `heavy` (`/orchestrate heavy <task>`). For one medium
+own (in HAPI, a peer session in a worktree of its own). For one medium
 task that is one PR, `/delegate <task>` in Claude Code runs a single lane in two
 layers: the session writes the spec and reviews, Codex writes the code. The
 shared workflow discovers the project's base, checks and optional
@@ -120,30 +114,26 @@ shared workflow discovers the project's base, checks and optional
 runtime, or permission to merge/deploy.
 
 [Project contract](skills/review-agent/references/project-contract.md) explains
-local checks and review overlays. [Sleash example](examples/sleash.project-workflow.md)
-shows a `main`/`make check` consumer. Gamejam retains native/browser/iOS testing,
-profiling consent, platform policy and measured review priorities in its profile.
+local checks and review overlays. [The example](examples/project-workflow.md)
+shows a `main`/`make check` consumer.
 
 **Connect a project:** copy [templates/project-workflow.md](templates/project-workflow.md)
 to the project's `.agents/project-workflow.md`, fill every placeholder from
 that checkout's own instructions, and follow the numbered procedure in
 [docs/onboarding.md](docs/onboarding.md#connect-a-project)
-(install, profile, Codex `agents.max_depth = 2`, smoke run, optional pin file,
+(install, profile, Codex `features.multi_agent = true`, smoke run, optional pin file,
 update/rollback).
 
-Nested agents and resume tools vary by client. The parent records scope, child
-IDs, deadlines and completed evidence. If nesting or SendMessage is unavailable,
-it coordinates sibling agents and collects results itself; incomplete coverage
-is reported as incomplete. Missing second-provider authentication never becomes
-a claimed cross-provider pass.
+Resume tools vary by client. The parent records scope, child IDs, deadlines
+and completed evidence. Incomplete coverage is reported as incomplete. Missing
+second-provider authentication never becomes a claimed cross-provider pass.
 
 Provider helpers require explicit `--model`. Read the corresponding SKILL.md
 before use. CLI paths may be selected explicitly; no automatic switch to an app
 binary or another model bypasses a user's wrapper. Logs contain version/run IDs,
 not credentials. `doctor` checks installation and CLI versions; it does not prove
 a model can run or that a user's inherited configuration isolates network/auth.
-For Codex it reads `config.toml` and warns only when `features.multi_agent` or
-`agents.max_depth` (2 for the heavy review topology) is missing or too low.
+For Codex it reads `config.toml` and warns when `multi_agent` is not enabled.
 
 ## Update, rollback and uninstall
 
@@ -160,7 +150,7 @@ at shell or agent startup.
 ## Team onboarding
 
 Use the [onboarding checklist](docs/onboarding.md) for a first installation,
-Mikhail's sleash pilot, model compatibility checks and the update/rollback drill.
+model compatibility checks and the update/rollback drill.
 A successful `doctor` is installation evidence; a real project task in a new
 session is workflow evidence. Do not mark a participant onboarded from a clone
 or a menu entry alone.
@@ -179,6 +169,5 @@ Use independent task fixtures for workflow changes, then pilot the supported
 clients before rolling the version out to the team.
 
 Fix common workflow behavior here; fix product commands and policy in its project;
-fix personal machine setup in its owner's configuration. Preserve the source
-notices in [PROVENANCE.md](PROVENANCE.md) and package licenses. Do not commit
-credentials, transcripts or private machine paths.
+fix personal machine setup in its owner's configuration. Preserve package
+licenses. Do not commit credentials, transcripts or private machine paths.

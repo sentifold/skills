@@ -1,7 +1,7 @@
 ---
 name: orchestrate
 disable-model-invocation: true
-argument-hint: "[light|heavy] <task>"
+argument-hint: "<task>"
 description: "Opt-in orchestration workflow for Claude Code in the Claude desktop app or a HAPI session that turns a scope into right-sized, cross-provider-validated, reviewed, clean-state-tested draft PRs landing directly on the target project's base branch, with every lane built by a linked session of its own. The invoking session drives the work, each lane session runs its gates and its reviewer subagents, and Codex is the other engine through the installed codex skill. Use ONLY when the caller explicitly names `orchestrate` or invokes `/orchestrate`, or explicitly asks for this plan -> validate -> lanes as linked sessions -> review -> test workflow. It chains github-create-pr, the live-test executor the project profile names for the surface under change, the project's profiling route, review-agent, and the project's cross-platform tooling. Do NOT auto-trigger from ordinary 'plan and implement' / feature / bugfix requests — those follow the project's AGENTS.md default behavior; this is the heavyweight gated pipeline, opt-in only. Explicit invocation in any language counts (e.g. 'прогони задачу через orchestrate'); a generic 'implement this' does not. Elsewhere it stops and says it needs the desktop app or HAPI."
 ---
 
@@ -122,9 +122,8 @@ message, a record or a log. HAPI's traps:
   every message**, which kills its subagents each time. A lane in such a
   project disables that server in its worktree before it launches anything;
   the project profile's "Worktrees" section names the server and the
-  setting (in gamejam,
-  `.claude/settings.local.json` holding
-  `{"disabledMcpjsonServers":["thgames"]}`, gitignored and so missing from
+  setting (for example `.claude/settings.local.json` holding
+  `{"disabledMcpjsonServers":["<server>"]}`, gitignored and so missing from
   every new worktree).
 - **The worktree is cut from the checkout's head, on HAPI's branch.**
   `sessionType: worktree` makes a folder `<repo>-worktrees/<MMDD-xxxx>` on a
@@ -150,9 +149,9 @@ turns, through a compaction).
 
 `SKILL_DIR` is the real installed directory containing this file; `SKILLS_ROOT`
 is its parent. Resolve symlinks. The sibling shared packages this workflow
-chains — `review-agent`, `github-create-pr`, `codex`, `claude`,
-`claude-stock-code-review` — live under `SKILLS_ROOT`, independently of the
-repository being changed. Do not look for them in the target repository.
+chains — `review-agent`, `github-create-pr`, `codex`, `claude` — live under
+`SKILLS_ROOT`, independently of the repository being changed. Do not look
+for them in the target repository.
 
 `PROJECT_ROOT` is the target checkout: supplied by the caller, else resolved
 with `git rev-parse --show-toplevel` from the user's working directory. Every
@@ -266,35 +265,15 @@ tasks follow the default "smallest direct change" behavior, not this ceremony.
   its own artifacts); a failed probe proves neither progress nor a stall, and
   a healthy producer is never stopped on directory metadata alone.
 
-## Weight
-
-The person picks the weight in the invocation: `heavy` runs the full review
-fan-out (`/orchestrate heavy <task>`); `light`,
-or no weight named, runs light. Both weights run every gate with the same
-cross-provider legs, stop conditions and readiness floor, and neither pins a
-weaker model; they differ only in how much own-engine review the two review
-gates spend:
-
-- **Light** (default): the Code Review gate's native leg is three grouped
-  reviewers whose candidates the lane verifies itself, with simplification
-  folded into the quality reviewer, and one reviewer over the fix delta; the
-  Final Review's orchestrator inspects the selected lenses itself.
-- **Heavy**: the native leg is `/claude-stock-code-review` (ten angles, a
-  verifier per candidate, a sweep) plus `/simplify` sized to the diff; the
-  Final Review spawns one lens child per selected lens.
-
-Record the weight in the scope record, in every lane brief and at closure;
-only the person changes it.
-
 ## Runtime mapping
 
 | Need | Who | How |
 |------|-----|-----|
 | Cross-provider design validation / review | the driver / the lane | `codex` skill, read-only/review |
 | Implementation | the lane | a `codex` write handoff into its own worktree, from a spec the lane writes, for anything nontrivial, fixes included; by hand only a trivial edit (a word, a caption, a conflict resolution, a one-line revert) |
-| First-order review | the lane | light: three grouped reviewer subagents; heavy: `/claude-stock-code-review` (copy of the stock `/code-review`) |
-| Simplification | the lane | light: folded into the quality reviewer; heavy: `/simplify` (model-invocable) |
-| Final layered review | the driver | `review-orchestrator` subagent, given the weight |
+| First-order review | the lane | three grouped reviewer subagents over the lane's range |
+| Simplification | the lane | folded into the quality reviewer |
+| Final layered review | the driver | `review-orchestrator` subagent |
 
 The counterpart is the `codex` skill; `claude` is Codex-only and never used
 here. Read its `SKILL.md` under `SKILLS_ROOT` before the first run — the
@@ -350,7 +329,6 @@ it must not live only in the driver's evolving memory:
 ```md
 Scope record
 - initial_ask: <the user's request, verbatim or tightly quoted>
-- weight: <light, or heavy when the person named it>
 - outcome: <what exists when done>
 - excluded: <deliberately out of scope>
 - done_proof: <the checks that mean done>
@@ -584,55 +562,40 @@ maps and docs with behavior changes in the same lane.
 A first-order review on every sub-task, before it can advance. Review an
 immutable snapshot: give every leg the same exact base/head (the shared
 [scope helper](../review-agent/scripts/resolve_scope.py) can record it) and do
-not edit the tree while a leg reads it. Run all three
-legs — the third folds into the first in light and may in heavy:
+not edit the tree while a leg reads it. Run both legs:
 
-1. A native correctness review, by [weight](#weight), run by the lane.
-   - **Light**: the lane launches three reviewer subagents (Agent tool,
-     `general-purpose`, told to review and never edit) over its exact
-     range (`<lane-base>...HEAD`, the base SHA recorded at lane fork), each
-     given the lane's intended behavior and the paths other lanes own. Each
-     reads only the Phase 1 angles of
-     [`claude-stock-code-review`](../claude-stock-code-review/SKILL.md),
-     runs none of its other phases, performs its angles itself in its own
-     context — never through the Agent tool — and owns one group: **inside
-     the diff** — Angles A, B, D and E, plus a doc comment deleted or
-     rewritten without its content carried over; **outside it** — Angle C
-     and Conventions, plus the local review docs the project profile names;
-     **quality** — Reuse, Simplification, Efficiency and Altitude, plus
-     unreachable branches and fallbacks for states that cannot occur. Each
-     returns, as text and never through ReportFindings, every candidate it
-     can tie to a quoted line and a concrete failure or cost, with no count
-     limit, ranked most severe first and
-     deduped across its angles, each with `file`, `line`, `summary`,
-     `failure_scenario` and `category`. The lane dedupes them and verifies each
-     against the code before fixing, with that skill's Phase 2 verdicts
-     (CONFIRMED / PLAUSIBLE / REFUTED); no verifier agents and no sweep.
-   - **Heavy**: the lane invokes **`/claude-stock-code-review`** — the
-     shared model-invocable copy of Claude Code's stock `/code-review` (it
-     runs as a forked background subagent). **Pass the lane's exact range as
-     the argument** (`<lane-base>...HEAD`): with no argument its diff
-     defaults to `@{upstream}...HEAD`, which reviews nothing once the lane's
-     draft-PR branch is pushed. If the copy is unavailable in the session,
-     spawn a fresh review subagent (Agent tool, `general-purpose`) over the
-     exact diff with a first-order mandate instead. Give either a generous
-     deadline, ~60 minutes of agent time; past it send one wrap-up message
-     if the runtime can reach the run, otherwise treat it as the silent
-     death below — never a silent wait.
+1. A native correctness review, run by the lane. The lane launches three
+   reviewer subagents (Agent tool, `general-purpose`, told to review and never
+   edit) over its exact range (`<lane-base>...HEAD`, the base SHA recorded at
+   lane fork), each given the lane's intended behavior and the paths other
+   lanes own. Each performs its angles itself in its own context — never
+   through the Agent tool — and owns one group: **inside the diff** — every
+   changed line for wrong logic, conditions, bounds and error handling,
+   behavior the diff removes that something still relies on, the language's
+   own pitfalls, and wrappers or proxies that drop or alter what they pass
+   on, plus a doc comment deleted or rewritten without its content carried
+   over; **outside it** — the callers, implementations and other files the
+   change reaches, and the repository's written conventions, plus the local
+   review docs the project profile names; **quality** — logic an existing
+   helper already covers, code that can be simpler, wasted work and code at
+   the wrong layer, plus unreachable branches and fallbacks for states that
+   cannot occur. Each returns, as text and never through ReportFindings,
+   every candidate it can tie to a quoted line and a concrete failure or
+   cost, with no count limit, ranked most severe first and deduped across
+   its angles, each with `file`, `line`, `summary`, `failure_scenario` and
+   `category`. The lane dedupes them and verifies each against the code before
+   fixing, with one verdict each — CONFIRMED when the inputs that trigger it
+   can be named, PLAUSIBLE when the mechanism holds but the trigger is
+   uncertain, REFUTED when the code does not do that or guards it; no verifier
+   agents and no sweep. Simplification is folded into the quality reviewer:
+   apply the worthwhile findings and record `simplify: folded-into-review`.
 2. An independent cross-provider review focused on the area of risk: the
    lane uses the **`codex` skill** in review mode. Reviewers receive the
    intended behavior, the exact diff and the relevant project constraints,
    without being steered to rubber-stamp
    an implementation.
-3. A simplification pass, **sized to the diff** in heavy: on a substantial diff,
-   the lane invokes the **`/simplify`** skill (it is model-invocable) — fix
-   what it surfaces. On a small or low-risk diff, skip the separate
-   pass: the native review's cleanup angles already surface reuse /
-   simplification / efficiency / altitude findings — apply the worthwhile
-   ones and record `simplify: folded-into-review`. Light always folds it in,
-   into the quality reviewer.
 
-**In light, scope and budget every reviewer subagent** — the three above and
+**Scope and budget every reviewer subagent** — the three above and
 the fix-delta one below. Hand it the exact range and short notes — the
 intended behavior in a few lines and, for the fix-delta one, the verified
 list as one line per finding (`file:line`, `summary`, `failure_scenario`) —
@@ -658,40 +621,26 @@ minutes" took 34 to 76 calls and 10 to 18 minutes, the two longest only
 after the lane's wrap-up while a restack waited, one of them calling itself
 within budget at 49 calls; one told to stop at its 40th call returned at 40).
 
-**In heavy, the forked native review can die silently.** `/claude-stock-code-review` forks
-finder subagents and a verifier; on a session model rate limit (`You've reached
-your ... limit`, HTTP 429) the finders' raw angle reports still arrive as task
-notifications but the consolidated, verified report never does (observed: nine
-forks across three lanes, zero consolidated reports). Treat the raw angles as
-unverified candidates — reconcile them yourself against the code — record the
-native leg as `degraded: no verified report`, and re-run the skill once on the
-final range when the limit has reset instead of re-forking per fix round.
-
 If a named surface is not model-invocable in the lane's session, run that
 leg in the lane's own form (a spawned subagent or the lane's own pass over the
 exact diff) and record the substitution — availability never cancels a leg,
-and no leg satisfies another; only the weight and the sizing rule above may
-fold the simplification pass into the native review.
+and no leg satisfies another.
 
 **Launch every leg that runs together, in one message, as background runs** — they
 are independent reads of the same diff; running them back-to-back is a
-scheduling bug. In heavy, because the simplification pass edits the code, reconcile at
-the gate against the **post-simplify** tree: confirm each correctness finding
-still applies, and if simplification rewrote the reviewed code beyond
-mechanical cleanups, re-run the cheap native review on the final diff before
-calling the gate.
+scheduling bug.
 
 **Proceed only when the native and cross-provider reviews agree the solution is
 sound.** Reconcile every finding with concrete code evidence; fix actionable
 in-scope defects, then repeat only the affected checks. A claim about what an
 outside service does or refuses stays PLAUSIBLE until probed or cited
 (observed: one recorded as confirmed carried a decision of the driver's until
-the Final Review found it false). In light that is one
+the Final Review found it false). That is one
 fix-delta check once the fixes change behavior: commit the fixes, then a fresh
 reviewer subagent, scoped and budgeted as above, over
 `<reviewed-head>..HEAD` and the enclosing functions, given the verified list
-and the remit of `claude-stock-code-review`'s Phase 3 — what the fixes broke
-or missed, not re-confirmation — reporting every candidate on the same terms,
+and its remit — what the fixes broke or missed, not re-confirmation —
+reporting every candidate on the same terms,
 plus one cross-provider pass over the same delta. The delta is what the lane
 itself wrote since the reviewed head: its own commits
 (`git log -p --first-parent --no-merges <reviewed-head>..HEAD`) and, for a
@@ -931,7 +880,7 @@ like a fix.
    every lane's base and branch — a lane's range is `<lane-base>...<lane-branch>`,
    which the skill's scope helper resolves with `--head <lane-branch>`, and a
    stacked chain's whole scope is `<base>...<top branch>` — each lane's
-   worktree path as read-only context, the weight, the first-order receipts
+   worktree path as read-only context, the first-order receipts
    with any ranges no first-order pass read (fixes made after a lane's last
    review), the project profile, and the outstanding limitations. For
    independent lanes the scope is the set of their ranges, the deterministic
@@ -945,25 +894,23 @@ like a fix.
    (`disable-model-invocation`), skill authorization does not chain, and the
    Skill call is refused by design. The checkpoint above already carries the
    user's consent, so the refusal is expected — neither a blocker nor a stop-and-ask.
-   The subagent runs in the driver's worktree, reads the lane worktrees it
-   is handed and writes no report file: it returns the whole report in its
-   result, and the driver saves it verbatim in the run's folder before
+   The orchestrator inspects the selected lenses itself. It runs in the
+   driver's worktree, reads the lane worktrees it is handed and writes no
+   report file: it returns the whole report in its result, and the driver
+   saves it verbatim in the run's folder before
    closure, because the desktop app refuses a subagent's report file in any
    location ("Subagents should return findings as text, not write report
    files"; observed in every pass of two runs).
-   Follow the skill's capability-based topology and
+   Follow the skill's topology and
    [bounded lifecycle](../review-agent/references/lifecycle.md): the parent
-   owns completion, child handles and results are tracked, and in heavy a
-   missing nested-spawn or resume capability is handled by parent fan-out and
-   collection (`NEEDS_PARENT_FANOUT`). Never finish with "children are
-   running" as though that were the report. A sequential native fallback
-   must state its reduced independence.
+   owns completion, child handles and results are tracked. Never finish with
+   "children are running" as though that were the report.
    An orchestrator stopped by a spend or rate limit (HTTP 429, "You've hit
    your … limit") is an interrupted run: tell the person, and once the limit
    is lifted or has reset, recover it as review-agent's "Resuming an
    interrupted run" says, on the same model. A relaunch repeats the
    cross-provider work it finished, and another model overrides the person's
-   choice (observed: a light pass stopped between launching its Codex chunks
+   choice (observed: a pass stopped between launching its Codex chunks
    and collecting them; after the top-up one message resumed it, and it
    collected every chunk, none run twice).
 
@@ -1057,7 +1004,7 @@ above it.
 | Gate | Scope | Condition to pass | On failure |
 |------|-------|-------------------|------------|
 | **Design** | per sub-task | Design cross-provider-validated before code, or honestly recorded as `adopted-existing-work` | **stop & ask**, then revise the plan |
-| **Code Review** | per sub-task | Native + cross-provider reviews agree; simplification applied or recorded `folded-into-review` | **stop & ask**, then iterate on the code |
+| **Code Review** | per sub-task | Native + cross-provider reviews agree; simplification folded into the quality reviewer and recorded `folded-into-review` | **stop & ask**, then iterate on the code |
 | **Live Test** | per PR | Risk-sized (`not-applicable:` / boot smoke / full exercise, reason recorded); clean-state executor returns a decisive `pass`; no central assertion is `needs-human` | **stop & ask**, then fix, read the fix delta, retest |
 | **Platform** | per scope, conditional | Simulator/emulator boot/render via the profile's host executor when the change reaches a profile-defined host surface, plus a real-device run for hardware-only questions (performance, memory, GPU features, touch); otherwise `not-applicable:` | **stop & ask**, then fix & re-run |
 | **Performance** | per scope, conditional | Before/after capture via the profile's profiling route when the change touches a performance-critical surface; no unjustified p95/p99/hitch regression | **stop & ask** with both captures |
@@ -1171,10 +1118,8 @@ Runs concurrently:
   launched as a single batch.
 - **Lanes** — one linked session each, on disjoint file sets; every brief
   names the paths the other lanes own.
-- **The review legs** — native review (in light, its three reviewers),
-  cross-provider review, and the
-  simplification pass (when it runs) launch together inside each lane; reconcile
-  against the post-simplify diff at the gate.
+- **The review legs** — native review (its three reviewers) and
+  cross-provider review launch together inside each lane.
 - **Live-test runs** — per-lane worktrees isolate managed instances by design
   where the profile says so (worktree-local registry, ephemeral ports,
   background window); nothing to
@@ -1186,12 +1131,9 @@ Runs concurrently:
   worktree, any source write during it triggers a reload and destroys the run
   — the same holds for a browser-test lane whose web server is that dev
   server: an edit mid-run shows up as
-  `Execution context was destroyed` failures that look like product bugs. In heavy, the simplification leg of the
-  Code Review gate edits code, so it and such a live test cannot overlap in
-  one lane — run the two read-only review legs alongside the live test and the
-  simplification pass after it, or finish the review legs first. Ordering the
-  live test before the review legs also costs a re-run whenever review changes
-  the code, which the readiness floor then requires anyway.
+  `Execution context was destroyed` failures that look like product bugs.
+  Ordering the live test before the review legs also costs a re-run whenever
+  review changes the code, which the readiness floor then requires anyway.
 - **Warm-up builds, PR prep, and background cross-provider runs** — overlap
   any of the above.
 
@@ -1270,7 +1212,6 @@ Report the smallest honest summary:
   it still waits on the person
 - the scope-record verdict: each recorded outcome shipped / amended /
   descoped, naming the user decision behind every amendment
-- the weight the run used (`light` or `heavy`)
 - per-sub-task/PR gate status using tagged statuses: `ran:`, `not-applicable:`,
   `blocked:`, `waived:`, or `degraded:` for Design / Code Review / Live Test, the per-scope
   Platform result (simulator verdict, and whether a device run was needed and made), the
@@ -1312,11 +1253,9 @@ names live under `PROJECT_ROOT`.
 - implementation: the lane session, through a `codex` write
   handoff, in its own worktree
 - per-step native review / simplification: in the lane — three grouped
-  reviewer subagents in light, **`/claude-stock-code-review`**
-  (copy of the stock `/code-review`) + **`/simplify`** sized to the diff in
-  heavy
+  reviewer subagents, with simplification folded into the quality reviewer
 - final review & lint (whole scope, once): **`review-agent` skill** via its
-  **`review-orchestrator`** subagent, given the weight
+  **`review-orchestrator`** subagent
 - build / run / clean-state test: the executor the project profile names per
   changed surface (it builds a fresh instance and launches under agent
   control; a browser or device executor carries the same tiers and Reporting Contract)
@@ -1337,7 +1276,7 @@ The brief, in this order:
 
 ```md
 Lane brief
-- run: <the scope record's initial_ask in a line>; weight: <light|heavy>
+- run: <the scope record's initial_ask in a line>
 - lane: <name>; slice: <what this PR delivers, and why it is one PR>
 - base: <branch> at <sha>; PR target: <the base, or the predecessor lane's branch>
 - start: <now | wait for `go`>

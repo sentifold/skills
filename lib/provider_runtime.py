@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Bounded process lifecycle for provider helpers (POSIX process groups; Windows job objects).
 
-Copyright (c) 2026 Theta Games. Derived from gamejam f4dbd06ec.
-Internal use only; see LICENSE.txt at the repository root.
+Copyright (c) 2026 Sentifold Inc. MIT License; see LICENSE.txt at the repository root.
 Provider configuration/authentication is inherited; this is not a security sandbox.
 """
 from __future__ import annotations

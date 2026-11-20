@@ -1,6 +1,0 @@
-interface:
-  display_name: "First-order Code Review"
-  short_description: "Find and verify correctness issues across ten review angles."
-  default_prompt: "Use $claude-stock-code-review for the explicitly requested first-order review."
-policy:
-  allow_implicit_invocation: false

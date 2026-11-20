@@ -612,20 +612,15 @@ def codex_config_warnings(config: Path) -> list[str]:
     try:
         settings = tomllib.loads(config.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return [f"Codex: {config} not found; nested agents need multi_agent = true under [features] and agents.max_depth = 2 for the heavy review topology, or use the documented parent-coordination fallback"]
+        return [f"Codex: {config} not found; the review topology needs multi_agent = true under [features]"]
     except (OSError, ValueError) as exc:
         return [f"Codex: cannot read {config}: {exc}"]
-    tables = {key: settings.get(key) if isinstance(settings.get(key), dict) else {} for key in ("features", "agents")}
+    features = settings.get("features") if isinstance(settings.get("features"), dict) else {}
     warnings = []
-    if tables["features"].get("multi_agent", settings.get("multi_agent")) is not True:
-        warnings.append(f"Codex: multi_agent is not enabled in {config}; the review topology needs nested agents, or use the documented parent-coordination fallback")
-    depth = tables["agents"].get("max_depth")
-    if depth is None:
-        warnings.append(f"Codex: agents.max_depth is not set in {config}; the heavy review topology needs depth 2, confirm the CLI default allows it")
-    elif not isinstance(depth, int) or depth < 2:
-        warnings.append(f"Codex: agents.max_depth = {depth} in {config}; the heavy review topology needs depth 2")
+    if features.get("multi_agent", settings.get("multi_agent")) is not True:
+        warnings.append(f"Codex: multi_agent is not enabled in {config}; the review topology needs the review-orchestrator subagent")
     if not warnings:
-        print(f"Codex config: multi_agent enabled, agents.max_depth = {depth} ({config})")
+        print(f"Codex config: multi_agent enabled ({config})")
     return warnings
 
 

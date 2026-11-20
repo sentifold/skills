@@ -10,8 +10,7 @@
         "claude": [
           "review-agent",
           "github-create-pr",
-          "codex",
-          "claude-stock-code-review"
+          "codex"
         ]
       }
     },
@@ -98,20 +97,6 @@
         "skills/codex/LICENSE.txt",
         "skills/codex/references/runtime-findings.md"
       ]
-    },
-    {
-      "name": "claude-stock-code-review",
-      "runtimes": [
-        "claude"
-      ],
-      "requires": {
-        "claude": [
-          "review-agent"
-        ]
-      },
-      "required_files": [
-        "skills/claude-stock-code-review/agents/openai.yaml"
-      ]
     }
   ],
   "agents": [
@@ -125,28 +110,12 @@
       ]
     },
     {
-      "name": "review-lens",
-      "runtime": "codex",
-      "source": "agents/codex/review-lens.toml",
-      "requires": [
-        "review-agent"
-      ]
-    },
-    {
       "name": "review-orchestrator",
       "runtime": "claude",
       "source": "agents/claude/review-orchestrator.md",
       "requires": [
         "review-agent",
         "codex"
-      ]
-    },
-    {
-      "name": "review-lens",
-      "runtime": "claude",
-      "source": "agents/claude/review-lens.md",
-      "requires": [
-        "review-agent"
       ]
     }
   ]
