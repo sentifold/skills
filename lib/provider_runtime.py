@@ -465,7 +465,7 @@ class Run:
         self.run_id = uuid.uuid4().hex
         self.root = self.receipt = self.result = None
         self.child = None
-        self.node_repl_listed = None
+        self.node_repl_absent = False
         # Implementation and fix rounds outlast the half hour and 32 turns a review fits in.
         write = (args.sandbox if provider == "codex" else args.mode) != "read-only"
         if args.timeout is None:
@@ -614,29 +614,44 @@ class Run:
         return "unknown option" not in err.read_text(encoding="utf-8", errors="replace").lower()
 
     def lookup_mcp(self, cli):
-        out = self.root / "mcp.stdout"
+        label = "mcp"
+        listing = self.root / f"{label}.stdout"
         try:
-            rc, out, _ = self.execute(
-                [cli, "mcp", "list", "--json"], "mcp",
-                cwd=str(Path(self.args.cd).absolute()) if self.args.cd else None,
-                limit=self.args.preflight_timeout)
-            if rc:
-                outcome = f"failed: exit {rc}"
+            try:
+                rc, _, _ = self.execute(
+                    [cli, "mcp", "list", "--json"], label, cwd=self.args.cd,
+                    limit=self.args.preflight_timeout)
+            except (RunError, OSError) as exc:
+                # A failed lookup keeps today's command line; a cleanup failure, a signal or the deadline ends the run.
+                if isinstance(exc, RunError) and exc.status not in ("TIMEOUT", "FAILED"):
+                    raise
+                self.cleanup()
+                if self.data.get("deferred_signals") or time.monotonic() >= self.deadline:
+                    raise
+                if isinstance(exc, RunError) and exc.status == "TIMEOUT":
+                    outcome = "failed: timeout"
+                else:
+                    outcome = "failed: not started"
             else:
-                servers = json.loads(out.read_text(encoding="utf-8"))
-                if not isinstance(servers, list):
-                    raise ValueError
-                self.node_repl_listed = any(
-                    isinstance(server, dict) and server.get("name") == "node_repl" for server in servers)
-                outcome = "node_repl listed" if self.node_repl_listed else "node_repl not listed"
-        except RunError as exc:
-            if exc.status != "TIMEOUT" or time.monotonic() >= self.deadline:
-                raise
-            outcome = "failed: timeout"
-        except (OSError, ValueError):
-            outcome = "failed: unreadable output"
+                if rc:
+                    outcome = f"failed: exit {rc}"
+                else:
+                    try:
+                        servers = json.loads(listing.read_text(encoding="utf-8"))
+                        if not isinstance(servers, list):
+                            raise ValueError
+                        names = {server["name"] for server in servers}
+                    except (OSError, ValueError, KeyError, TypeError, RecursionError):
+                        outcome = "failed: unreadable output"
+                    else:
+                        self.node_repl_absent = "node_repl" not in names
+                        outcome = "node_repl not listed" if self.node_repl_absent else "node_repl listed"
         finally:
-            out.unlink(missing_ok=True)
+            # Clear sensitive configuration but keep the path the receipt and watcher use.
+            try:
+                listing.write_bytes(b"")
+            except OSError:
+                pass
         self.save(mcp_lookup=outcome)
 
     def command(self, cli):
@@ -657,8 +672,8 @@ class Run:
             argv += ["-c", f"sandbox_workspace_write.network_access={str(a.network).lower()}"]
             if not a.search:
                 argv += ["-c", "web_search='disabled'" if os.name == "nt" else 'web_search="disabled"']
-            # Only confirmed absence skips the override, which would create an invalid server.
-            if not a.browser_mcp and self.node_repl_listed is not False:
+            # Skipped only when the lookup listed the servers without node_repl: alone, it is an invalid entry.
+            if not a.browser_mcp and not self.node_repl_absent:
                 argv += ["-c", "mcp_servers.node_repl.enabled=false"]
             # Overrides any inherited developer_instructions for this run only.
             argv += ["-c", f"developer_instructions='{AGENT_REQUEST}'"]

@@ -49,14 +49,13 @@ if args == ['auth', 'status', '--json']:
     print(json.dumps({'loggedIn': True}))
     sys.exit(0)
 if args == ['mcp', 'list', '--json']:
-    mcp = os.environ.get('FAKE_MCP', 'node_repl')
-    if mcp == 'unsupported':
+    if mode == 'mcp-unsupported':
         print("error: unrecognized subcommand 'mcp'", file=sys.stderr)
         sys.exit(2)
-    if mcp == 'garbage':
+    if mode == 'mcp-garbage':
         print('not json')
     else:
-        print(json.dumps([] if mcp == 'none' else [{
+        print(json.dumps([] if mode == 'mcp-none' else [{
             'name': 'node_repl', 'enabled': True,
             'transport': {'type': 'stdio', 'command': 'node', 'args': []}}]))
     sys.exit(0)
@@ -267,34 +266,24 @@ class CrossProviderHelpersTests(unittest.TestCase):
 
     def test_node_repl_override_follows_the_configured_servers(self):
         cases = (
-            ('configured', [(None, ['--cd', str(self.target)], 'node_repl listed'),
-                            (None, [], 'node_repl listed')]),
-            ('not configured', [('none', [], 'node_repl not listed')]),
-            ('browser MCP', [(None, ['--browser-mcp'], None)]),
-            ('failed lookup', [('unsupported', [], 'failed: exit 2'),
-                               ('garbage', [], 'failed: unreadable output')]),
+            (['--cd', str(self.target)], 'success', True, 'node_repl listed', [str(self.target)]),
+            ([], 'success', True, 'node_repl listed', [str(self.caller)]),
+            ([], 'mcp-none', False, 'node_repl not listed', [str(self.caller)]),
+            (['--browser-mcp'], 'success', False, None, []),
+            ([], 'mcp-unsupported', True, 'failed: exit 2', [str(self.caller)]),
+            ([], 'mcp-garbage', True, 'failed: unreadable output', [str(self.caller)]),
+            (['--cd', str(self.root / 'missing dir')], 'success', True, 'failed: not started', []),
         )
-        for case, runs in cases:
-            with self.subTest(case=case):
-                for mode, flags, expected in runs:
-                    self.record.unlink(missing_ok=True)
-                    self.env.pop('FAKE_MCP', None)
-                    if mode:
-                        self.env['FAKE_MCP'] = mode
-                    result = self.run_helper('codex', *flags)
-                    args = self.payload(result)['argv']
-                    self.assertEqual('mcp_servers.node_repl.enabled=false' in args,
-                                     expected not in (None, 'node_repl not listed'))
-                    receipt = self.receipt(result)
-                    calls = [json.loads(line) for line in self.record.read_text().splitlines()]
-                    lookups = [call for call in calls if call['argv'] == ['mcp', 'list', '--json']]
-                    if expected is None:
-                        self.assertNotIn('mcp_lookup', receipt)
-                        self.assertEqual(lookups, [])
-                    else:
-                        self.assertEqual(receipt['mcp_lookup'], expected)
-                        self.assertEqual([call['cwd'] for call in lookups],
-                                         [str(self.target if '--cd' in flags else self.caller)])
+        for flags, mode, override, expected, directories in cases:
+            with self.subTest(flags=flags, mode=mode):
+                self.record.unlink(missing_ok=True)
+                result = self.run_helper('codex', *flags, mode=mode)
+                args = self.payload(result)['argv']
+                self.assertEqual('mcp_servers.node_repl.enabled=false' in args, override)
+                self.assertEqual(self.receipt(result).get('mcp_lookup'), expected)
+                calls = [json.loads(line) for line in self.record.read_text().splitlines()]
+                lookups = [call['cwd'] for call in calls if call['argv'] == ['mcp', 'list', '--json']]
+                self.assertEqual(lookups, directories)
 
     def test_selected_cli_never_skips_broken_wrapper_and_reports_capabilities(self):
         for provider in ('codex', 'claude'):
@@ -706,7 +695,7 @@ class CrossProviderHelpersTests(unittest.TestCase):
             self.assertNotIn('secret-model', result.stderr)
             calls = [json.loads(line)['argv'] for line in self.record.read_text().splitlines()]
             self.assertTrue(all('--version' in args or '--help' in args
-                                or args[:3] == ['mcp', 'list', '--json'] for args in calls))
+                                or args == ['mcp', 'list', '--json'] for args in calls))
             self.record.unlink()
             prompt = 'quotes " and %PATH% ^ & | < > !\r\nnext line'
             command = self.command(provider, prompt=False) + ['--', prompt]
