@@ -314,8 +314,9 @@ These are the failure modes we hit driving Codex; the skill is shaped to avoid t
   navigation, is refused every time, and the model then reports "web access was
   denied" instead of falling back to the provider-side `web_search` (observed
   2026-09-15, a whole review delivered with unverified prices). The helper now
-  passes `-c mcp_servers.node_repl.enabled=false` when the configuration defines
-  that server; `--browser-mcp` leaves the inherited setting alone.
+  passes `-c mcp_servers.node_repl.enabled=false` unless a lookup lists the
+  configured servers without that one (next bullet); `--browser-mcp` leaves
+  the inherited setting alone.
   In the prompt, say "use the built-in web_search tool for web facts".
 - **Disabling an undefined MCP server breaks startup.** On a clean configuration,
   the override alone creates an entry with no transport, so `codex exec` exits

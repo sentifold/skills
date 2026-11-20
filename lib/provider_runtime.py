@@ -619,14 +619,17 @@ class Run:
         try:
             try:
                 rc, _, _ = self.execute(
-                    [cli, "mcp", "list", "--json"], label, cwd=self.args.cd,
+                    [cli, "mcp", "list", "--json"], label, cwd=self.args.cd or None,
                     limit=self.args.preflight_timeout)
             except (RunError, OSError) as exc:
                 # A failed lookup keeps today's command line; a cleanup failure, a signal or the deadline ends the run.
                 if isinstance(exc, RunError) and exc.status not in ("TIMEOUT", "FAILED"):
                     raise
                 self.cleanup()
-                if self.data.get("deferred_signals") or time.monotonic() >= self.deadline:
+                deferred = self.data.get("deferred_signals")
+                if deferred:
+                    raise Cancelled(deferred[0]) from exc
+                if time.monotonic() >= self.deadline:
                     raise
                 if isinstance(exc, RunError) and exc.status == "TIMEOUT":
                     outcome = "failed: timeout"
@@ -647,11 +650,14 @@ class Run:
                         self.node_repl_absent = "node_repl" not in names
                         outcome = "node_repl not listed" if self.node_repl_absent else "node_repl listed"
         finally:
-            # Clear sensitive configuration but keep the path the receipt and watcher use.
+            # Stop anything still writing, then empty rather than remove: the receipt names the path.
             try:
-                listing.write_bytes(b"")
-            except OSError:
-                pass
+                self.cleanup()
+            finally:
+                try:
+                    listing.write_bytes(b"")
+                except OSError:
+                    pass
         self.save(mcp_lookup=outcome)
 
     def command(self, cli):
