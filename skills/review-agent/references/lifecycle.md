@@ -11,7 +11,7 @@ Choose an overall budget before launching: honor a user/project budget; absent
 one use a 30-minute review budget per chunk and provider helper timeouts
 within it, passed as `--timeout`, since a helper's own default is the whole
 30 minutes (observed: chunks of 180–750 changed lines took 385–555 s at
-`xhigh`; a light pass over 1,858 lines, unchunked, about 40 minutes). A
+`xhigh`; a pass over 1,858 lines, unchunked, about 40 minutes). A
 budget limits orchestration work, not arbitrary unrelated machine processes.
 
 State progression is explicit:
@@ -38,11 +38,8 @@ waiting with Python's `threading.Event().wait(5)` rather than the shell's
 Run capacity-limited work in waves and release only children owned by this run
 when the runtime supports it.
 
-If nested spawn is unavailable, return the planned assignments and collected
-results to the parent as `NEEDS_PARENT_FANOUT`. The parent can fan out its own
-children or perform the remaining inspection itself, disclosing reduced
-independence. Do not claim a missing capability is available because a skill
-file or agent template names it.
+Do not claim a missing capability is available because a skill file or agent
+template names it.
 
 If a child stops early, inspect its state. Resume once with the precise missing
 assignment only when the actual runtime supports messaging/resume. Without that

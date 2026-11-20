@@ -2,7 +2,7 @@
 name: delegate
 disable-model-invocation: true
 argument-hint: "<task>"
-description: "Opt-in workflow for Claude Code that takes one medium task — one PR in one repository — to a validated, reviewed, tested draft PR in two layers: the invoking session, on whatever model the person started it on, designs, writes the spec, judges the diff and lands; Codex, through the installed codex skill, reads the code, writes it, fixes it and gives the diff its second read. No lanes, no linked sessions, no reviewer fan-out. Use ONLY when the caller explicitly names `delegate` or invokes `/delegate`, or explicitly asks for this spec -> Codex writes -> the session reviews loop by description. It chains github-create-pr, review-agent's light pass as its final gate, and the live-test executor the project profile names for the surface under change. Do NOT auto-trigger from ordinary 'plan and implement' / feature / bugfix requests — those follow the project's AGENTS.md default behavior. Explicit invocation in any language counts (e.g. 'прогони задачу через delegate'); a generic 'implement this' does not. A scope that needs several PRs, a second repository or a conditional gate stops and names `/orchestrate`."
+description: "Opt-in workflow for Claude Code that takes one medium task — one PR in one repository — to a validated, reviewed, tested draft PR in two layers: the invoking session, on whatever model the person started it on, designs, writes the spec, judges the diff and lands; Codex, through the installed codex skill, reads the code, writes it, fixes it and gives the diff its second read. No lanes, no linked sessions, no reviewer fan-out. Use ONLY when the caller explicitly names `delegate` or invokes `/delegate`, or explicitly asks for this spec -> Codex writes -> the session reviews loop by description. It chains github-create-pr, review-agent's pass as its final gate, and the live-test executor the project profile names for the surface under change. Do NOT auto-trigger from ordinary 'plan and implement' / feature / bugfix requests — those follow the project's AGENTS.md default behavior. Explicit invocation in any language counts (e.g. 'прогони задачу через delegate'); a generic 'implement this' does not. A scope that needs several PRs, a second repository or a conditional gate stops and names `/orchestrate`."
 ---
 
 # Delegate
@@ -88,7 +88,7 @@ consent boundary.
 | Where the design lands in the code, and what is wrong with it | Codex | one read-only run |
 | Implementation, fixes included | Codex | a write handoff from a spec the session writes; by hand only a trivial edit (a word, a caption, a conflict resolution, a one-line revert) or a few lines that change no behavior, ten at most, noted in the scope record |
 | The second read of the diff | Codex | a read-only run of its own, in a fresh context |
-| The final review of the whole change | a `review-orchestrator` subagent of the session | `review-agent`'s light pass, with a Codex leg of its own |
+| The final review of the whole change | a `review-orchestrator` subagent of the session | `review-agent`'s pass, with a Codex leg of its own |
 | A hands-on live run or probe | a subagent of the session | the executor the profile names for the surface |
 
 Read the `codex` skill's [`SKILL.md`](../codex/SKILL.md) and its
@@ -352,16 +352,16 @@ the checks, the delta read — before the retest.
 3. **Start what the final head still needs, in one message**, and edit
    nothing until it is in:
    - **The readiness floor** the profile names, on the final pushed head.
-   - **The final review**, unless it already ran: `review-agent`'s light
-     pass over the whole change
-     (`<base-sha>...HEAD`), by one fresh `review-orchestrator` subagent that
+   - **The final review**, unless it already ran: `review-agent`'s pass over
+     the whole change (`<base-sha>...HEAD`), by one fresh `review-orchestrator`
+     subagent that
      has seen neither the spec nor the rounds. It picks the lenses the
      change calls for, inspects them itself and runs a Codex leg of its own
      beside it. Invoking `delegate` is the person's word for this pass:
      spawn it with the Agent tool, never through the Skill tool, which
-     refuses an explicit-only skill by design. Hand it the range, the weight
-     `light`, the profile, the Codex model and effort this run resolved, what
-     the two reads covered with any range neither read, and the change's
+     refuses an explicit-only skill by design. Hand it the range, the profile,
+     the Codex model and effort this run resolved, what the two reads covered
+     with any range neither read, and the change's
      stated limitations. Its result is the whole
      report, opening with `REVIEW COMPLETE` or `REVIEW INCOMPLETE`, returned
      as text: the pass writes no report file, so ask for none and save it
@@ -391,7 +391,7 @@ the checks, the delta read — before the retest.
 | **Design** | One read-only Codex run has grounded and attacked the design before any new code — for adopted work after its code, recorded as `ran: adopted-existing-work` — and the person has answered what was theirs to decide | **stop & ask**, then revise the design |
 | **Code Review** | Codex's read and the session's read have both covered the whole change, every later delta has had a reader, the last round's checks are green, no confirmed in-scope finding is open, within the rounds allowed | **stop & ask** |
 | **Live Test** | `not-applicable:` with its reason when no runtime surface is touched; otherwise the smoke or full exercise chosen returns a decisive `pass` under a clean state | **stop & ask**, then fix through a round and retest |
-| **Final Review** | `review-agent`'s light pass returned `REVIEW COMPLETE` on the head it read, on the session's model with its Codex leg; every later delta has had a round's read, and no confirmed finding is open | fix through a round; on `REVIEW INCOMPLETE` **stop & ask** |
+| **Final Review** | `review-agent`'s pass returned `REVIEW COMPLETE` on the head it read, on the session's model with its Codex leg; every later delta has had a round's read, and no confirmed finding is open | fix through a round; on `REVIEW INCOMPLETE` **stop & ask** |
 | **Readiness floor** | The profile's floor on the final pushed head | fix through a round while one is left, then run it again; else **stop & ask** |
 
 Record every gate with a tagged status — `ran:`, `not-applicable:`,

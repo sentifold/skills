@@ -1,20 +1,20 @@
 ---
 name: review-agent
 disable-model-invocation: true
-argument-hint: "[light|heavy] [scope]"
-description: "Second-order layered review of a change scope — assumes a first-order pass (orchestrate's Code Review gate, /code-review, or codex review) already ran; an orchestrator subagent picks the relevant lenses, inspects them itself (light, the default) or through own-engine lens subagents (heavy), runs a cross-provider leg, validates findings, and reports exact coverage. Use only when the user invokes review-agent or an explicitly invoked workflow names this gate."
+argument-hint: "[scope]"
+description: "Second-order layered review of a change scope — assumes a first-order pass (orchestrate's Code Review gate, /code-review, or codex review) already ran; an orchestrator subagent picks the relevant lenses, inspects them itself, runs a cross-provider leg, validates findings, and reports exact coverage. Use only when the user invokes review-agent or an explicitly invoked workflow names this gate."
 ---
 
 # Review Agent
 
 Layered, cross-validated review of a change scope, built on native subagents —
 no external runner. This is the **second-order** pass: it assumes the
-first-order generalists — `/code-review` (`codex review` also counts) and `/simplify` —
-already ran on this scope, the way the orchestrate pipeline's Code Review gate
-runs them per step. It does not re-hunt what those tools own (local correctness
-bugs, hygiene, readability, generic simplification); its value is the
-project-encoded, cross-cutting judgment they structurally lack: contracts,
-lifecycle, architecture, platform behavior, and follow-through. For an
+first-order pass — orchestrate's Code Review gate, `/code-review`, `codex review`,
+or `/simplify` — already ran on this scope. It does not re-hunt what those
+passes own (local correctness bugs, hygiene, readability, generic
+simplification); its value is the project-encoded, cross-cutting judgment
+they structurally lack: contracts, lifecycle, architecture, platform behavior,
+and follow-through. For an
 explicitly requested standalone review, include the first-order fallback below.
 Review source without editing it.
 
@@ -25,9 +25,7 @@ whose contract names this pass (the Final Review gate of `orchestrate` or
 `delegate`) carries the user's consent, and its driver runs it by spawning the
 `review-orchestrator` subagent directly — never through the Skill tool, which
 refuses `disable-model-invocation` skills by design. That refusal is expected,
-not a consent failure and not a reason to stop. Where nested spawn is
-unavailable, the authorized workflow reads this file and dispatches the role
-itself; neither path widens authorization.
+not a consent failure and not a reason to stop.
 
 ## Establish the two roots
 
@@ -45,21 +43,15 @@ to PROJECT_ROOT; a link in this package is relative to the linking file.
 ## Topology
 
 The **calling agent** does exactly one thing: spawn a single
-**`review-orchestrator`** subagent with the change scope and weight, then relay the
+**`review-orchestrator`** subagent with the change scope, then relay the
 orchestrator's report. Both runtimes install the def from this package
 (`agents/claude/review-orchestrator.md` and
 `agents/codex/review-orchestrator.toml`). The def is deliberately thin: it Reads
 this file and executes the orchestrator role below. Keep the user's session
 clean — no lens work in the caller.
 
-The **weight** is named by the person, or by the workflow that invokes this
-pass: `light` (the default) or `heavy` (`/review-agent heavy <scope>`). In
-light the orchestrator applies every lens this file assigns to a subagent
-itself, in one pass while the cross-provider leg runs, and spawns no lens or
-verifier children, so it needs no nested spawn: the caller always spawns it,
-and the nested-spawn fallbacks below are heavy's alone. Heavy runs the fan-out
-as written. Scope, checks, lens selection, the cross-provider leg, validation and
-the result contract are the same in both, and the report names the weight.
+The orchestrator applies every selected lens itself, in one pass while the
+cross-provider leg runs, and spawns no lens or verifier children.
 
 Wait for it synchronously where the runtime lets the caller wait on a child
 (`claude -p`, the Agent SDK, Codex). Claude Code's interactive clients — the
@@ -73,24 +65,11 @@ running" produces a notification indistinguishable from a finished run — if
 what comes back is not the report shape, resume it (see "Resuming an
 interrupted run") and never relay a progress note as the review.
 
-Prefer that one `review-orchestrator` child when it can own nested reviewers
-and return their results. Check the tools actually exposed in this session
-before choosing that topology; installed role definitions do not prove nested
-spawn, message, or resume support.
-
-When nested spawning is unavailable, the calling agent owns orchestration and
-fans out `review-lens` children itself. If a delegated orchestrator discovers
-that limit later, it returns `NEEDS_PARENT_FANOUT` with the resolved scope,
-selected lenses, completed results, and outstanding tasks. The parent continues
-that run rather than starting it over. With no agent capability, perform the
-lenses sequentially and disclose the reduced independence. Do not invent tools
-such as `SendMessage` or configuration fields to enable a missing capability.
-
 Follow [the bounded lifecycle](references/lifecycle.md). Record every child/job
 handle, assigned lenses, immutable scope, status, and result. A child that ends
-with “waiting for children” has returned progress, not a review. If a supported
+with “the legs are running” has returned progress, not a review. If a supported
 resume/message tool exists, use it once with the missing work; otherwise collect
-its available children/results and finish in the parent. If their handles or
+its available job results and finish in the parent. If their handles or
 results are inaccessible, report that coverage as missing. Never loop forever,
 relaunch a completed leg, or report COMPLETE on the basis of a notification.
 
@@ -153,38 +132,28 @@ The **orchestrator** owns the whole run:
    environment are unavailable checks, not code defects or passes. Some tests
    write build output: keep source review read-only and use an isolated
    checkout/output directory when needed.
-3. **Select lenses** from the archetype map below — at most **five lens
-   subagents per run**, hard cap; `review/correctness-runtime-safety.md` is
-   always one of them. Engage the first-order fallback only when the user
-   says no first-order pass ran on this scope, or asks for a full standalone
+3. **Select lenses** from the archetype map below;
+   `review/correctness-runtime-safety.md` is always one of them. Engage the
+   first-order fallback only when the user says no first-order pass ran on
+   this scope, or asks for a full standalone
    review; its narrower form covers the ranges the caller names as read by no
    first-order pass. Do not auto-escalate when relevance is unclear; note the
    skipped borderline lens in the report instead. Select every lens the
    diff's surfaces call for, all five when all apply.
 4. **Run both legs in parallel.** You own this run to completion: **do not end
-   your turn while a child is still working** — spawn each wave with the
-   synchronous form of the agent call (`run_in_background: false`) so the call
-   itself blocks. Where only an async spawn exists, wait in the bounded calls
-   the lifecycle allows, retaining every handle, and spend the gaps collecting
-   finished results — not writing status notes. Once the legs are launched you
-   will have no other pending action; **that is the cue to emit the wait call,
-   not to write a status note.** If the machine cannot hold every lens at
-   once, run them in waves of two or three and await each wave the same way —
-   a narrower wave is fine, an abandoned one is not. Use bounded waves fitting
-   the observed runtime capacity; do not assume a fixed nesting depth or
-   concurrent-child limit.
-   - **Own-engine leg**: in light, your own pass (see the weight above),
-     made after launching the cross-provider leg in the background and before
-     waiting on it; in heavy, spawn one `review-lens` child per selected lens (or
-     `general-purpose` where that def is absent); group 2–3 closely related
-     lenses into one subagent when the diff is small. Each subagent gets:
-     PROJECT_ROOT, the exact scope (commit IDs and digest), the lens doc
-     path, its family's common doc — read first
+   your turn while a provider job is still working**. Wait in the bounded
+   calls the lifecycle allows, retaining every handle, and spend the gaps
+   collecting finished results — not writing status notes. Once your own pass
+   is finished you will have no other pending action; **that is the cue to emit
+   the wait call, not to write a status note.**
+   - **Own-engine leg**: your own pass, made after launching the cross-provider
+     leg in the background and before waiting on it. Read the family's common
+     doc first
      ([review-common](references/review-common.md) for `review/*` lenses,
-     [linter-common](references/linter-common.md) for `linter/*`) — the
-     applicable project overrides, and any project-provided escape weights.
-     It investigates with tools and returns findings in that common doc's
-     output format.
+     [linter-common](references/linter-common.md) for `linter/*`), then each
+     lens doc, the applicable project overrides, and any project-provided
+     escape weights. Investigate with tools and return findings in that common
+     doc's output format.
    - **Cross-provider leg**: one holistic session on the other engine, given
      the same scope, the same selected lens doc paths plus the project
      overrides, and the same instruction to read the common doc first and
@@ -197,8 +166,7 @@ The **orchestrator** owns the whole run:
      fail closed and waste the run. See "Cross-provider leg" below for the
      helper contract.
 5. **Validate.** Merge and dedupe findings from both legs. Every finding that
-   survives must be verified against the actual code — by you, or by a small
-   bounded verifier subagent (heavy only) for contested or high-severity ones. Drop what
+   survives must be verified against the actual code by you. Drop what
    does not survive; mark provenance (`corroborated` when both legs found it,
    `single-leg` otherwise). Distinguish introduced regressions from existing
    causes exposed by this change. "No issues found" is a valid outcome. Do not
@@ -239,14 +207,14 @@ Where the runtime supports messaging or resume, an orchestrator that stopped
 early is **resumable from its own transcript** — send it a message and it picks
 up with its context. Try that before paying for a fresh run: a re-spawn
 re-reads the whole diff and re-runs the cross-provider leg from zero, while a
-resume usually costs one message. Do **not** assume its children survived the
-gap — that the resume keeps them alive is unverified, so make re-checking them
-the first instruction. Tell it plainly what to do: re-check every child it
-spawned, collect the finished ones, nudge or relaunch any that stopped
-mid-investigation rather than returning findings, launch whatever wave is still
+resume usually costs one message. Do **not** assume its provider jobs survived
+the gap — that the resume keeps them alive is unverified, so make re-checking
+them the first instruction. Tell it plainly what to do: re-check every job it
+launched, collect the finished ones, nudge or relaunch any that stopped
+mid-investigation rather than returning findings, launch whatever work is still
 owed, and deliver the report — without ending its turn again.
 
-Without that capability, the parent collects the accessible child results and
+Without that capability, the parent collects the accessible job results and
 finishes the remaining work itself. Re-run from scratch only when the
 transcript itself is gone (the session that owned it died), and say so in the
 report along with the leg or lenses that were lost.
@@ -328,7 +296,7 @@ transcripts in external reports.
 ## Provider policy
 
 Judgment work runs on strong tiers only — a review you cannot trust is worse
-than no review. Native lens subagents inherit the session's model and effort;
+than no review. The orchestrator inherits the session's model and effort;
 the defs deliberately pin none. The cross-provider leg needs an explicit model:
 **both ephemeral helpers refuse to run without `--model`** (exit 2, no `--out`
 file written) and neither reads a provider config file as a fallback, so a run
@@ -361,13 +329,10 @@ replace or supplement lenses, with explicit project-relative paths and reasons,
 and may supply measured escape statistics for lens selection. Do not import
 another project's domain assumptions or escape weights.
 
-**Hard cap: at most five lens subagents per run.**
 `review/correctness-runtime-safety.md` is always one of them; add the rest by
 the diff's archetype — the smallest set that covers the diff's actual
-surfaces, not the cap. When more surfaces genuinely apply (e.g. the linter
-lens on top of a full review set), group closely related lenses into one
-subagent instead of exceeding the cap, and name the skipped borderline lens
-in the report. When all five archetypes apply, all five are selected.
+surfaces. Name the skipped borderline lens in the report. When all five
+archetypes apply, all five are selected.
 
 | Diff archetype | Add |
 |----------------|-----|
@@ -384,15 +349,13 @@ in the report. When all five archetypes apply, all five are selected.
 
 `/code-review`, `codex review`, and `/simplify` own local correctness,
 hygiene, and readability. When the user says no first-order pass ran on this
-scope — or asks for a full standalone review — tell the
-`correctness-runtime-safety` subagent to also own local single-path logic
+scope — or asks for a full standalone review — extend the
+`correctness-runtime-safety` lens to also own local single-path logic
 defects (suspend its first-order deference), and engage the linter lenses:
 [`linter/code-hygiene.md`](references/linter/code-hygiene.md) +
-[`linter/readability.md`](references/linter/readability.md) grouped into one
-subagent, plus
+[`linter/readability.md`](references/linter/readability.md), plus
 [`linter/speculative-complexity-cleanup.md`](references/linter/speculative-complexity-cleanup.md)
-when new abstractions, fallbacks, or indirection appear. The five-subagent cap
-still holds — group lenses rather than dropping relevant coverage silently.
+when new abstractions, fallbacks, or indirection appear.
 When the caller names ranges no first-order pass read (fixes made after a
 lane's last review), both legs own local single-path logic defects within
 those ranges, without the linter lenses.
@@ -400,18 +363,11 @@ those ranges, without the linter lenses.
 ## Runtime notes
 
 - **Claude Code**: the caller launches the `review-orchestrator` subagent
-  with the Agent tool; in heavy, the orchestrator launches lens/verifier subagents
-  (`review-lens`, or `general-purpose` where that def is absent) with its own
-  Agent tool when nested spawn is supported. Subagents inherit the session
-  model; the def deliberately pins none.
-- **Codex**: subagents are named-only, so the package installs two Codex defs —
-  the caller spawns `review-orchestrator` with the scope in the prompt, and
-  in heavy the orchestrator spawns one `review-lens` instance per selected lens. Those
-  children need `[agents] max_depth = 2` in the Codex config (the installer
-  warns when it is absent). Neither def pins a model — they inherit the
-  session's. Mind the runtime's concurrent-children cap (`max_threads`,
-  default 6): run lens subagents in waves and close completed children before
-  spawning verifiers.
+  with the Agent tool. The subagent inherits the session model; the def
+  deliberately pins none.
+- **Codex**: subagents are named-only, so the package installs the
+  `review-orchestrator` def. The caller spawns it with the scope in the prompt.
+  The def pins no model — it inherits the session's.
 
 ## If a leg cannot run
 
@@ -437,17 +393,16 @@ snapshot, both provider legs completed, applicable required checks are accounted
 for, and surviving findings were verified. It does not mean the change has no
 findings. Missing required coverage stays INCOMPLETE even if a user accepts
 proceeding; record that acceptance separately. Scope drift cannot certify the
-current tree. Sequential native inspection — a light run's own pass, reported
-in the legs status as `own-engine: orchestrator pass (light)` — is disclosed
-and counts only when independent native reviewers were not a project
-requirement.
+current tree. Sequential native inspection — reported in the legs status as
+`own-engine: orchestrator pass` — is disclosed and counts only when independent
+native reviewers were not a project requirement.
 
 Include: repository and exact scope (commit IDs, digest); system model;
 selected/skipped lenses and why; check results; each leg's status and the
 model and effort it actually ran on, as the runtime reports them — an
 inherited value is named as inherited, never as what the profile names;
 findings with file:line, evidence, concrete failure,
-severity and fix; coverage limits, outstanding children and their disposition;
+severity and fix; coverage limits, outstanding jobs and their disposition;
 any local artifact path. A plan, progress note, notification, or empty provider
 output cannot satisfy this contract.
 

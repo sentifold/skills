@@ -361,7 +361,6 @@ class WorkflowPackageTests(unittest.TestCase):
         for tag in ("`ran:`", "`not-applicable:`", "`blocked:`", "`waived:`", "`degraded:`"):
             self.assertIn(tag, text)
         self.assertIn("`ran: adopted-existing-work`", text)
-        self.assertIn("`degraded: no verified report`", text)
         self.assertIn("`REVIEW COMPLETE`", text)
         self.assertIn("`REVIEW INCOMPLETE`", text)
         hard_stop = text.split("```md\nHard Stop\n", 1)[1].split("```", 1)[0]
@@ -374,7 +373,7 @@ class WorkflowPackageTests(unittest.TestCase):
         self.assertIn("## Gates summary", text)
         self.assertIn("readiness floor is unconditional", text)
         self.assertIn("DO\nNOT commit", text)
-        self.assertIn("`@{upstream}...HEAD`", text)
+        self.assertIn("`<lane-base>...HEAD`", text)
         self.assertIn("`git checkout <base-sha> -- <file>`", text)
         self.assertIn("never through the Skill tool", text)
         self.assertIn("Provider policy", text)
@@ -460,7 +459,7 @@ class WorkflowPackageTests(unittest.TestCase):
             home = fixture / "consumer home"
             locations = install.Locations(home, home / ".codex", home / ".claude")
             install.apply(install.prepare(package, locations, {"codex", "claude"}))
-            for name in ("review-orchestrator", "review-lens"):
+            for name in ("review-orchestrator",):
                 path = locations.codex / "agents" / (name + ".toml")
                 agent = tomllib.loads(path.read_text())
                 self.assertEqual(agent["name"], name)

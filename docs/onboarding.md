@@ -13,7 +13,7 @@ project, including its checks and an independent review.
    edits are preserved; `--adopt NAME` is for explicitly chosen links.
 3. **Install.** Run `apply`, then `doctor` with the same home/runtime roots.
    `doctor` checks the legacy duplicates in `~/.codex/skills` and, for Codex,
-   `features.multi_agent` / `agents.max_depth` in `config.toml`; copies of the
+   `features.multi_agent` in `config.toml`; copies of the
    shared packages inside a project are checked by that project's own test.
    Installer state lives in
    `~/.local/share/sentifold-skills-state/` (the receipt and, during `apply`, the
@@ -58,9 +58,8 @@ checkout.
    branch and the checks its `AGENTS.md` names. Delete an item that does not
    apply instead of leaving a guess; a profile never imports another project's
    commands. A filled example: `examples/project-workflow.md`.
-3. **Codex: allow nested agents.** The heavy review-agent topology
-   (caller → `review-orchestrator` → `review-lens`) needs
-   `[features] multi_agent = true` and `[agents] max_depth = 2` in
+3. **Codex: allow agents.** The review-agent topology
+   (caller → `review-orchestrator`) needs `[features] multi_agent = true` in
    `config.toml`: the user-level `~/.codex/config.toml` (checked by `doctor`) or
    the project's `.codex/config.toml` (not read by `doctor`). Claude Code needs
    no configuration.
