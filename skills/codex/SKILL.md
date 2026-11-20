@@ -168,10 +168,15 @@ block the provider connection, other sandbox profiles or external MCP tools.
 The default disables only the `node_repl` MCP entry, unless a lookup of the
 configured servers (`codex mcp list --json`, in the target directory) succeeds
 without it; `--browser-mcp` skips the lookup and leaves its inherited setting in
-place. Other MCP servers, writable roots, hooks and config may remain inherited:
-`read-only` is the selected CLI sandbox mode, not a claim that every external
-integration is incapable of mutation. Match those settings to the authorized task
-before delegating work.
+place. The lookup's listing is the configuration itself; it is emptied after the
+lookup, and stays in the private run directory only if the supervisor is killed
+during the lookup (that directory is then never swept, its receipt staying
+`STARTING`), if a signal lands between stopping the lookup and emptying the
+listing, or if emptying it fails, which nothing records. Other MCP servers,
+writable roots, hooks and config may remain inherited: `read-only` is the
+selected CLI sandbox mode, not a claim that every external integration is
+incapable of mutation. Match those settings to the authorized task before
+delegating work.
 
 The helper runs Codex with its own `--ephemeral`, which avoids saved
 session rollouts; the helper itself takes no such flag (a run passed one

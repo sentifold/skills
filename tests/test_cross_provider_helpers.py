@@ -280,7 +280,10 @@ class CrossProviderHelpersTests(unittest.TestCase):
                 result = self.run_helper('codex', *flags, mode=mode)
                 args = self.payload(result)['argv']
                 self.assertEqual('mcp_servers.node_repl.enabled=false' in args, override)
-                self.assertEqual(self.receipt(result).get('mcp_lookup'), expected)
+                receipt = self.receipt(result)
+                self.assertEqual(receipt.get('mcp_lookup'), expected)
+                if expected is not None:
+                    self.assertEqual((Path(receipt['receipt']).parent / 'mcp.stdout').read_bytes(), b'')
                 calls = [json.loads(line) for line in self.record.read_text().splitlines()]
                 lookups = [call['cwd'] for call in calls if call['argv'] == ['mcp', 'list', '--json']]
                 self.assertEqual(lookups, directories)

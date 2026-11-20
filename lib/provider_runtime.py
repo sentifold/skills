@@ -528,11 +528,11 @@ class Run:
             self.shield = False
         self.child = None
 
-    def execute(self, argv, label, *, stdin=None, cwd=None, limit=None):
+    def execute(self, argv, label, *, stdin=None, cwd=None, limit=None, env=None):
         out, err = self.root / f"{label}.stdout", self.root / f"{label}.stderr"
         with out.open("wb") as stdout, err.open("wb") as stderr:
             self.ownership.spawn(self, argv, stdin=stdin if stdin is not None else subprocess.DEVNULL,
-                                 stdout=stdout, stderr=stderr, cwd=cwd, env=self.env)
+                                 stdout=stdout, stderr=stderr, cwd=cwd, env=env if env is not None else self.env)
             self.save(child_pid=self.child.pid, phase=label,
                       stdout=str(out), stderr=str(err))
             process = self.child
@@ -618,19 +618,24 @@ class Run:
         listing = self.root / f"{label}.stdout"
         try:
             try:
+                env = None
+                home = self.env.get("CODEX_HOME")
+                if home and not os.path.isabs(home):
+                    # The lookup stands in the target directory; a relative home must still be the run's.
+                    env = dict(self.env, CODEX_HOME=os.path.abspath(home))
                 rc, _, _ = self.execute(
                     [cli, "mcp", "list", "--json"], label, cwd=self.args.cd or None,
-                    limit=self.args.preflight_timeout)
+                    limit=self.args.preflight_timeout, env=env)
             except (RunError, OSError) as exc:
                 # A failed lookup keeps today's command line; a cleanup failure, a signal or the deadline ends the run.
                 if isinstance(exc, RunError) and exc.status not in ("TIMEOUT", "FAILED"):
                     raise
                 self.cleanup()
+                if time.monotonic() >= self.deadline:
+                    raise
                 deferred = self.data.get("deferred_signals")
                 if deferred:
                     raise Cancelled(deferred[0]) from exc
-                if time.monotonic() >= self.deadline:
-                    raise
                 if isinstance(exc, RunError) and exc.status == "TIMEOUT":
                     outcome = "failed: timeout"
                 else:
