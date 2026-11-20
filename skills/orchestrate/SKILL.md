@@ -620,7 +620,8 @@ legs — the third folds into the first in light and may in heavy:
      defaults to `@{upstream}...HEAD`, which reviews nothing once the lane's
      draft-PR branch is pushed. If `/code-review` is unavailable in the
      session, spawn a fresh review subagent (Agent tool, `general-purpose`)
-     over the exact diff with a first-order mandate instead. Give either a generous
+     over the exact diff with a first-order mandate covering all three light
+     groups above instead. Give either a generous
      deadline, ~60 minutes of agent time; past it send one wrap-up message
      if the runtime can reach the run, otherwise treat it as the silent
      death below — never a silent wait.
