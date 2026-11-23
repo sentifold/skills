@@ -11,6 +11,7 @@ and optional `.agents/project-workflow.md`.
 | `review-agent` | Claude Code, Codex | Explicit layered review, or the named final gate of `orchestrate` or `delegate` |
 | `github-create-pr` | Claude Code, Codex | Create/update a PR when requested |
 | `codex` | Claude Code | Explicit second-provider task or authorized workflow leg |
+| `codex-review` | Claude Code | A Codex review at fixed settings (`gpt-6.2-astra`, `xhigh`, read-only) when asked for one |
 | `claude` | Codex | Explicit second-provider task or authorized workflow leg |
 
 `catalog.json` is the installable set. `agents/` supplies the review orchestrator

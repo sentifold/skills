@@ -97,6 +97,17 @@
         "skills/codex/LICENSE.txt",
         "skills/codex/references/runtime-findings.md"
       ]
+    },
+    {
+      "name": "codex-review",
+      "runtimes": [
+        "claude"
+      ],
+      "requires": {
+        "claude": [
+          "codex"
+        ]
+      }
     }
   ],
   "agents": [
