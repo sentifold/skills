@@ -29,13 +29,13 @@ lines print *before* the rejection and are noise, not the cause: `failed to load
 missing field supports_reasoning_summaries` and `Model metadata for <m> not found. Defaulting
 to fallback metadata`.
 
-`gpt-6-astra` supports `low`, `medium`, `high`, `xhigh`, and `max`, but not `none`;
+`gpt-6.2-astra` supports `low`, `medium`, `high`, `xhigh`, and `max`, but not `none`;
 check a different model's supported efforts before overriding them. See the
 [official Astra guide](https://developers.openai.com/api/docs/guides/latest-model).
 
 **New sibling models (added 2026-09):** `gpt-6-sol` is the mid-tier model --
 "built to power complex coding and agentic workflows," cheaper/faster than
-`gpt-6-astra` -- and `gpt-6-luna` is the cheapest/fastest tier, for
+`gpt-6.2-astra` -- and `gpt-6-luna` is the cheapest/fastest tier, for
 high-volume/low-depth tasks; both list `none` as a supported effort alongside
 `low`, `medium`, `high`, `xhigh`, `max` (Astra does not support `none`). Source:
 the [models reference](https://developers.openai.com/api/docs/models). `gpt-6-sol`
